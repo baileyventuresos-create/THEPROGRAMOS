@@ -16,7 +16,7 @@
       const marker = 'boot();';
       const at = html.lastIndexOf(marker);
       if (at < 0) throw new Error('OS boot marker not found');
-      html = html.slice(0, at) + '<\/script><script src="./launch60-overrides.js"><\/script><script>boot();' + html.slice(at + marker.length);
+     html = html.slice(0, at) + '<\/script><script src="./launch60-overrides.js"><\/script><script src="./launch60-corrections.js"><\/script><script>boot();' + html.slice(at + marker.length);
       document.open();
       document.write(html);
       document.close();
