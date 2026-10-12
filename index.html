@@ -4,10 +4,27 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>THE PROGRAM OS</title>
-  <meta http-equiv="refresh" content="0; url=./THE%20PROGRAM%20OS.html">
-  <script>window.location.replace('./THE%20PROGRAM%20OS.html');</script>
 </head>
 <body>
-  <p>Launching <a href="./THE%20PROGRAM%20OS.html">THE PROGRAM OS</a>…</p>
+  <p id="loading" style="font:16px system-ui;padding:24px">Loading THE PROGRAM OS…</p>
+  <script>
+  (async function(){
+    try {
+      const res = await fetch('./THE%20PROGRAM%20OS.html', {cache:'no-store'});
+      if (!res.ok) throw new Error('Prototype source returned '+res.status);
+      let html = await res.text();
+      const marker = 'boot();';
+      const at = html.lastIndexOf(marker);
+      if (at < 0) throw new Error('OS boot marker not found');
+      html = html.slice(0, at) + '<\/script><script src="./launch60-overrides.js"><\/script><script>boot();' + html.slice(at + marker.length);
+      document.open();
+      document.write(html);
+      document.close();
+    } catch (err) {
+      document.getElementById('loading').textContent = 'THE PROGRAM OS failed to load: ' + err.message;
+      console.error(err);
+    }
+  })();
+  </script>
 </body>
 </html>
