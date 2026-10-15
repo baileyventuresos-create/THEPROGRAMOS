@@ -43,5 +43,45 @@
   GI[id].buildKeys=BUILDS.filter(b=>GI[id].builds&&GI[id].builds[b]);
   if(typeof EQP!=='undefined' && typeof parseEquip==='function') EQP[id]=parseEquip(GI[id]);
 
+  const coneId='TP2-069';
+  const coneExisting=GI[coneId];
+  if (coneExisting && String(coneExisting.name||coneExisting.title||'').trim() !== 'Cone Carry') {
+    console.warn('[THE PROGRAM OS] TP2-069 already occupied; Cone Carry not injected.');
+  } else {
+    GI[coneId]=Object.assign({},coneExisting||{}, {
+      id:coneId,
+      name:'Cone Carry',
+      title:'Cone Carry',
+      phase:'MOVE',
+      family:'Horizontal Power / Acceleration',
+      sport:'Multi-Sport',
+      equip:'2 cones per athlete/lane; clearly separated sprint lanes',
+      setup:'Create parallel lanes with one starting cone per athlete. Each athlete begins at the starting cone holding a second cone. Use 2 or more athletes head-to-head, or organize athletes into relay teams. Provide enough lateral separation that no athlete enters another athlete’s jump landing or sprint path.',
+      explain:'On GO, each athlete performs a powerful two-foot broad jump while holding the cone. Stick and control the two-foot landing, then place the carried cone at the legitimate landing point. Immediately sprint back to the starting cone, touch/reach the start, accelerate back to the dropped cone, pick it up, and perform the next broad jump from that location. Stick, place, sprint back, return, and repeat. Complete 4 broad jumps. After Jump 4, sprint back through the starting point to finish.',
+      score:'Race format: first athlete to complete 4 legal broad jumps and sprint back through the starting point wins. Team format: run the same sequence as a relay; the next athlete may leave only after the returning athlete crosses the start line.',
+      cues:['Load','Stick','Explode'],
+      builds:{
+        LEARN:'2 jumps at submaximal speed. No race. Own each two-foot landing, place the cone accurately, and rehearse the first acceleration step before increasing intent.',
+        COMPETE:'Head-to-head race for 4 broad jumps. First athlete to complete all 4 legal jumps and sprint through the starting point wins.',
+        PRESSURE:'Best-of-3 head-to-head races with short but sufficient recovery. Athletes must preserve jump and landing quality as fatigue rises; stop or regress when landing control deteriorates.',
+        CHAOS:'Team relay. Each athlete completes the Cone Carry sequence before crossing the start line to release the next teammate. First team to finish wins.'
+      },
+      regress:'Use 2 broad jumps instead of 4, remove the race, and reduce jump intensity until the athlete consistently demonstrates a balanced two-foot landing and clean acceleration transition.',
+      progress:'Increase competitive pressure before adding volume. Progress from Learn to head-to-head competition, then best-of-3 or relay formats only while jump and landing quality remain clean.',
+      watch:'Aggressive horizontal force production; coordinated arm and hip load; two-foot takeoff; balanced two-foot landing; no extra shuffle before acceleration; strong first three sprint steps; consistent jump quality across all four repetitions.',
+      safety:'Broad jumps require a controlled two-foot landing before the athlete may sprint. Cones must be placed at the actual landing point — no throwing or reaching the cone forward. Keep athletes in clearly separated lanes with landing and sprint paths free of other athletes or equipment. Stop the rep if landing control breaks down.',
+      origin:'Coach-designed drill — 2026-10-14',
+      filterWhy:'CANDIDATE — coach-designed horizontal-power and acceleration race. Strong fit for THE PROGRAM movement library, but requires field testing before Launch 60 promotion.',
+      status0:'THE LAB — Candidate',
+      base:'Coach Designed',
+      tier:'Candidate',
+      launch:{lid:'L60-'+coneId,readiness:'THE LAB — CANDIDATE — FIELD TEST REQUIRED',role:'Candidate / Not Launch 60'},
+      fieldTest:{date:null,rating:null,maxRating:10,status:'NOT YET FIELD TESTED',notes:['Test lane spacing and collision risk.','Confirm four jumps preserves landing quality for target age groups.','Evaluate head-to-head and relay versions for idle time and competitive response.','Promote only after coach field test and safety review.']}
+    });
+    GI[coneId].buildKeys=BUILDS.filter(b=>GI[coneId].builds&&GI[coneId].builds[b]);
+    if(typeof EQP!=='undefined' && typeof parseEquip==='function') EQP[coneId]=parseEquip(GI[coneId]);
+    console.info('[THE PROGRAM OS] Candidate drill loaded:',coneId,GI[coneId].name);
+  }
+
   console.info('[THE PROGRAM OS] Field-tested drill loaded:',id,GI[id].name);
 })();
