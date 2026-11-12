@@ -2,9 +2,15 @@
 -- Migration 001: operational data model (PostgreSQL / Supabase-compatible)
 --
 -- STATUS: version-controlled migration ONLY. Not applied to any database.
--- A Supabase project named TheProgramOS exists (ref rkgdwqgmldznczikrjip,
--- found 2026-11-11) but its schema is uninspected; applying this requires
--- an owner-approved backend decision — see docs/MORNING_DECISIONS.md.
+-- Supabase project TheProgramOS (ref rkgdwqgmldznczikrjip) was inspected
+-- read-only 2026-11-12 and found EMPTY (0 tables in public, 0 auth users).
+-- Backend decision 2026-11-12 (FINAL): Supabase is the SOLE backend for
+-- The Program OS; the Neon TheProgramOS project is unused. Applying this
+-- migration to TheProgramOS requires Marcus's approval — see
+-- docs/MORNING_DECISIONS.md and docs/SUPABASE_HANDOFF.md.
+-- Verified 2026-11-12: no PG16+ features are used (gen_random_uuid,
+-- JSONB, partial indexes, plpgsql FOR UPDATE are all PG15-compatible);
+-- the project runs Postgres 15.8.1.50.
 --
 -- Design notes
 -- * Cohort enrollment cap (cohorts.enrollment_cap) and session reservation
@@ -28,6 +34,11 @@
 -- * Idempotent: safe to re-run (IF NOT EXISTS / ON CONFLICT guards).
 
 BEGIN;
+
+-- CITEXT is used for app_users.email / guardians.email. Supabase provides
+-- the citext extension; create it if missing so a fresh database does not
+-- fail on the first CREATE TABLE. (Dashboard SQL editor accepts this.)
+CREATE EXTENSION IF NOT EXISTS citext;
 
 CREATE TABLE IF NOT EXISTS app_users (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -55,7 +66,11 @@ CREATE TABLE IF NOT EXISTS athletes (
   dob DATE, -- sensitive: minors' data; least-privilege access only
   age_years INT CHECK (age_years BETWEEN 5 AND 19),
   sports TEXT[] NOT NULL DEFAULT '{}',
-  eligible_cohort_ids UUID[] NOT NULL DEFAULT '{}',
+  eligible_cohort_ids UUID[] NOT NULL DEFAULT '{}', -- DENORMALIZED SNAPSHOT ONLY.
+  -- Source of truth for cohort eligibility is the cohort_enrollments join
+  -- table (decided 2026-11-12). The Postgres store hydrates this array
+  -- from cohort_enrollments (status='enrolled') at read time; never edit
+  -- this array as the way to grant eligibility — insert an enrollment row.
   restrictions TEXT[] NOT NULL DEFAULT '{}', -- readiness restrictions, e.g. ['Competitive Conditioning']
   notes TEXT, -- coach notes; never a measurement
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -259,7 +274,13 @@ DECLARE
 BEGIN
   SELECT capacity_effective INTO v_cap FROM training_sessions WHERE id = p_session_id FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'SESSION_NOT_FOUND'; END IF;
-  IF v_cap IS NULL OR v_cap < 0 THEN RAISE EXCEPTION 'SESSION_NOT_BOOKABLE'; END IF;
+  -- Infeasible sessions refuse to book (2026-11-12 fix): a cap of 0 means
+  -- zero coaches or an equipment shortfall — waitlisting everyone would
+  -- silently promise seats that can never exist. The engine enforces the
+  -- same guard in JS; this is the atomic backstop for direct callers.
+  IF v_cap IS NULL OR v_cap <= 0 THEN
+    RAISE EXCEPTION 'session_not_bookable: session % has no bookable capacity (effective cap %).', p_session_id, v_cap;
+  END IF;
 
   SELECT COUNT(*) INTO v_confirmed FROM reservations
     WHERE session_id = p_session_id AND status = 'confirmed';
