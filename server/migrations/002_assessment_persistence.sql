@@ -1,7 +1,10 @@
 -- THE PROGRAM OS — Operational Foundation V1
 -- Migration 002: assessment persistence (PostgreSQL / Supabase-compatible)
 --
--- STATUS: version-controlled migration ONLY. Not applied to any database.
+-- STATUS: APPLIED 2026-11-12 to Supabase project TheProgramOS
+-- (ref rkgdwqgmldznczikrjip) with Marcus's approval, via the dashboard
+-- SQL editor. Verified after apply: 22 public tables, 10 assessment
+-- definitions seeded.
 -- Follows assessment-engine/INTEGRATION.md "Future persistence model"
 -- (assessment_definitions / assessment_sessions / assessment_results)
 -- with one addition: a derived_records table that keeps the prototype's

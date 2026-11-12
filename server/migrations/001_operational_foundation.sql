@@ -1,13 +1,16 @@
 -- THE PROGRAM OS — Operational Foundation V1
 -- Migration 001: operational data model (PostgreSQL / Supabase-compatible)
 --
--- STATUS: version-controlled migration ONLY. Not applied to any database.
--- Supabase project TheProgramOS (ref rkgdwqgmldznczikrjip) was inspected
--- read-only 2026-11-12 and found EMPTY (0 tables in public, 0 auth users).
+-- STATUS: APPLIED 2026-11-12 to Supabase project TheProgramOS
+-- (ref rkgdwqgmldznczikrjip) with Marcus's approval, via the dashboard
+-- SQL editor. Verified after apply: 18 public tables, 18 RLS-enabled,
+-- reserve_seat() present. The project was inspected read-only
+-- 2026-11-12 and found EMPTY before apply (0 tables in public,
+-- 0 auth users).
 -- Backend decision 2026-11-12 (FINAL): Supabase is the SOLE backend for
--- The Program OS; the Neon TheProgramOS project is unused. Applying this
--- migration to TheProgramOS requires Marcus's approval — see
--- docs/MORNING_DECISIONS.md and docs/SUPABASE_HANDOFF.md.
+-- The Program OS; the Neon TheProgramOS project is unused. Applied with
+-- Marcus's approval 2026-11-12 — see docs/MORNING_DECISIONS.md and
+-- docs/SUPABASE_HANDOFF.md.
 -- Verified 2026-11-12: no PG16+ features are used (gen_random_uuid,
 -- JSONB, partial indexes, plpgsql FOR UPDATE are all PG15-compatible);
 -- the project runs Postgres 15.8.1.50. Executed 2026-11-12 against a

@@ -1,9 +1,11 @@
 -- THE PROGRAM OS — Backend Completion (Supabase-only, 2026-11-12)
 -- Migration 003: Supabase Auth link + minimum role-scoped RLS policies
 --
--- STATUS: version-controlled migration ONLY. NOT applied to production
--- (or anywhere). Applying it to TheProgramOS (ref rkgdwqgmldznczikrjip)
--- requires Marcus's explicit approval — see docs/SUPABASE_HANDOFF.md.
+-- STATUS: APPLIED 2026-11-12 to Supabase project TheProgramOS
+-- (ref rkgdwqgmldznczikrjip) with Marcus's approval, via the dashboard
+-- SQL editor. Verified after apply: 22 public tables, 58 RLS policies,
+-- 10 assessment definitions, auth-link columns present.
+-- See docs/SUPABASE_HANDOFF.md.
 --
 -- ASSUMES the auth schema exists: Supabase provides auth.users and the
 -- auth.uid() function. A local throwaway Postgres used to rehearse this

@@ -3,8 +3,10 @@
 Backend-completion mission, branch `feature/program-operational-foundation-v1`.
 Supabase-only backend DECIDED by Marcus 2026-11-12 (FINAL); dual-database
 directive cancelled; Neon TheProgramOS project is UNUSED — preserve without
-modification. Nothing in this mission was merged, deployed, or applied to
-any database. No Neon project was touched. No UI file was touched.
+modification. Nothing in this mission was merged or deployed.
+Migrations 001 + 002 + 003 were APPLIED to TheProgramOS on 2026-11-12
+with Marcus's approval (see "Applied to TheProgramOS" below). No Neon
+project was touched. No UI file was touched.
 
 ## What this mission did
 
@@ -27,7 +29,7 @@ any database. No Neon project was touched. No UI file was touched.
   coach reads athletes in cohorts they head + writes
   attendance/reservations for their sessions; parent/guardian read-only
   own athletes via `athlete_guardians` + book/cancel for them; athlete
-  read-only own record). NOT applied anywhere.
+  read-only own record). Applied to TheProgramOS 2026-11-12 (see below).
 - **Infeasible-session defect fixed** (`server/reservation-engine.js`):
   `capacityFor()` / `reserve()` throw `SESSION_NOT_BOOKABLE` when the
   computed capacity is infeasible or the effective cap is 0 (zero
@@ -138,27 +140,52 @@ tests could not have caught them):
    instead of a waitlist spot. Now `RACE_WAITLISTED` (entry attached)
    and the engine returns the waitlist outcome.
 
-Caveats: local Postgres is 18.6; Supabase runs 15.8.1.50. PG15
-compatibility rests on the feature review (no PG16+ constructs), not on
-a PG15 execution. The RLS checks used a stub `auth` schema (one-row
-`auth._uid` impersonation), not real Supabase Auth / JWTs.
+Caveats: the local rehearsal ran on Postgres 18.6; Supabase runs
+15.8.1.50. The migrations have now also executed successfully on live
+Supabase PG 15.8 (see "Applied to TheProgramOS" below), so DDL-level
+PG15 compatibility is proven by execution, not just review. The RLS
+behaviour checks still used a stub `auth` schema (one-row `auth._uid`
+impersonation), not real Supabase Auth / JWTs.
+
+## Applied to TheProgramOS (2026-11-12)
+
+Marcus approved applying 001 + 002 + 003 to TheProgramOS as the dev
+target. Applied in order via the dashboard SQL editor, same signed-in
+session throughout (GitHub OAuth, `baileyventuresos-create`; no
+email/password sign-in used). Verified after each step with count
+queries run in the editor:
+- **001:** "Success. No rows returned" — 18 public tables, 18
+  RLS-enabled tables, `reserve_seat()` present.
+- **002:** "Success. No rows returned" — 22 public tables, 10
+  assessment definitions seeded.
+- **003:** "Success. No rows returned" (Supabase showed its standard
+  "Potential issue detected" confirmation because the script contains
+  DROP POLICY statements; confirmed with "Run query" — the script is
+  the approved idempotent migration) — 22 public tables, 58 RLS
+  policies, 10 assessment definitions, `app_users.auth_user_id` and
+  `athletes.app_user_id` columns present.
+- **Transcription catch:** the 003 script as handed to the browser
+  contained one mistyped line (`DROP POLICY IF EXISTS adef_read ON
+  adef_read ON assessment_definitions;` — a duplicated phrase
+  introduced while copying, not present in the repo file). It was
+  caught and corrected to `DROP POLICY IF EXISTS adef_read ON
+  assessment_definitions;` BEFORE the script ran (corrected line
+  visually confirmed in the editor). The repo file was already correct;
+  no file change was needed.
 
 ## Still unverified — do not claim otherwise
 
-- Migrations 001 + 002 + 003 have NOT been applied to TheProgramOS
-  (production Supabase). Applying them needs Marcus's explicit approval.
-- The RLS policies in 003 are the minimum viable set. They were
-  exercised locally (see above), but NOT against live Supabase. Before
-  any real athlete record is stored, repeat the checks against
-  TheProgramOS (after approval to apply):
-  1. Apply 001 + 002 + 003 in order via the dashboard SQL editor.
-  2. Two concurrent `reserve_seat()` calls for one seat: exactly one
+- Migrations 001 + 002 + 003 ARE applied to TheProgramOS (see above).
+  Structural counts are verified, but the live behaviour checks have
+  NOT run yet. Before any real athlete record is stored, repeat the
+  checks against TheProgramOS:
+  1. Two concurrent `reserve_seat()` calls for one seat: exactly one
      confirms (same test the SQLite suite runs).
-  3. `reserve_seat()` on a cap-0 session raises `session_not_bookable`.
-  4. As an `authenticated` parent user: can read own athletes, cannot
+  2. `reserve_seat()` on a cap-0 session raises `session_not_bookable`.
+  3. As an `authenticated` parent user: can read own athletes, cannot
      read other athletes; as a coach: can read only their cohorts'
      athletes; as `anon`: nothing.
-  5. Confirm the double-`RESERVED` audit rows (one from
+  4. Confirm the double-`RESERVED` audit rows (one from
      `reserve_seat()`, one from the engine) are acceptable, or reconcile
      by action + reservation id.
 - No live Supabase connection has been made from this code (no
@@ -172,8 +199,10 @@ a PG15 execution. The RLS checks used a stub `auth` schema (one-row
 
 ## What needs Marcus
 
-1. Approve applying migrations 001 + 002 + 003 to TheProgramOS as the
-   dev target (production use is a separate decision).
+1. DONE 2026-11-12: migrations 001 + 002 + 003 applied to TheProgramOS
+   as the dev target (verified above). Next: repeat the live
+   verification checks (concurrency, cap-0, RLS scoping) against
+   TheProgramOS — step 3 of the deployment sequence.
 2. Confirm the RLS policy set is acceptable before any real athlete
    record is stored (see verification list above).
 3. Decide the API transport (Supabase Edge Function / server route)

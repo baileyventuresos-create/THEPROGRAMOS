@@ -27,8 +27,10 @@ continued around every item; nothing is stalled except the item itself.
   store (`server/postgres-store.js`, `pg`), the thin authenticated API
   (`server/api.js`), migration 003 (auth link + RLS), and the
   session-scheduling link (`server/schedule-session.js`) against
-  Supabase only. Nothing in this mission applied anything to any
-  database or touched any Neon project.
+  Supabase only. Migrations 001 + 002 + 003 were APPLIED to
+  TheProgramOS on 2026-11-12 with Marcus's approval (dashboard SQL
+  editor; verified: 22 tables, 58 policies, 10 assessment definitions).
+  No Neon project was touched.
 - **Context (corrected 2026-11-11, inspected 2026-11-12):** A Supabase
   project named **TheProgramOS** DOES exist — ref
   `rkgdwqgmldznczikrjip`, organization **BigWiffWiffleBallLeague** (Pro
@@ -40,14 +42,18 @@ continued around every item; nothing is stalled except the item itself.
   tables exist (auth/realtime/storage/vault). No real athlete data, no
   prototype data — nothing for migrations 001 + 002 to collide with
   (all `CREATE TABLE IF NOT EXISTS`, standard SQL, no Postgres 16+
-  features). No migrations have been applied to it.
-- **Decision still needed:** Approve applying migrations 001 + 002 + 003
-  to TheProgramOS as the dev target. Production use of this project is
-  a separate decision.
-- **Blocked until decided:** applying migrations anywhere; any UI
-  integration with live data. (Building the API layer is DONE — see
-  above; it runs against injected stores in tests and has never touched
-  live Supabase.)
+  features). Migrations 001 + 002 + 003 were applied 2026-11-12 (see
+  below); before that, none had been applied.
+- **APPLIED 2026-11-12 (Marcus's approval, dev target):** 001 + 002 +
+  003 applied in order via the dashboard SQL editor; verified after
+  each step (001: 18 tables, 18 RLS-enabled, `reserve_seat()` present;
+  002: 22 tables, 10 assessment definitions; 003: 22 tables, 58
+  policies, auth-link columns present). Production use of this project
+  is still a separate decision.
+- **Blocked until decided:** production use; any UI integration with
+  live data until the API transport decision is made. (Building the API
+  layer is DONE — see above; it runs against injected stores in tests
+  and has never touched live Supabase.)
 
 ## 3. Migrations are unvalidated against real PostgreSQL
 
@@ -56,12 +62,16 @@ continued around every item; nothing is stalled except the item itself.
   2026-11-12 — see #2). The migrations were written and reviewed, and
   their key invariants are asserted in tests (row lock, unique index,
   RLS enabled, price default, citext extension, infeasible-session
-  guard), but the SQL has not been executed against PostgreSQL.
+  guard). The SQL was executed against a throwaway local Postgres 18.6
+  (2026-11-12, all checks passed) and applied to TheProgramOS itself
+  (Postgres 15.8.1.50) on 2026-11-12 with structural verification
+  (22 tables, 58 policies, 10 definitions). Live concurrency + RLS
+  checks against TheProgramOS are still to be run before any real use.
 - **Decision needed:** None — this is a sequencing note, not an approval
-  ask. Once #2 is approved, apply to scratch and run the concurrency
-  checks before any real use.
+  ask. Run the live checks (docs/SUPABASE_HANDOFF.md) before any real use.
 - **Blocked until decided:** any claim that the migrations are proven
-  against Postgres (they are currently "reviewed, not executed").
+  against live Supabase behaviour — structural counts are verified, but
+  the live concurrency and RLS checks have not run yet.
 
 ## 4. Membership price: $149 fixed vs the prototype's "$149 / $179"
 

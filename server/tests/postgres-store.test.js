@@ -204,8 +204,8 @@ test('countConfirmed returns a number; listWaitlist orders by position', async (
 
 test('migration 003 links auth and adds the minimum role-scoped RLS policies', () => {
   const sql = fs.readFileSync(path.join(__dirname, '..', 'migrations', '003_auth_rls.sql'), 'utf8');
-  assert.match(sql, /NOT applied to production/, '003 must state it is not applied');
-  assert.match(sql, /requires Marcus's explicit approval/, '003 must state it needs Marcus approval');
+  assert.match(sql, /APPLIED 2026-11-12 to Supabase project TheProgramOS/, '003 must record it was applied 2026-11-12');
+  assert.match(sql, /with Marcus's approval/, '003 must record Marcus approval');
   assert.match(sql, /auth_user_id UUID UNIQUE REFERENCES auth\.users\(id\)/, 'app_users links to auth.users');
   assert.match(sql, /app_users\.app_user_id|athletes[\s\S]*app_user_id UUID REFERENCES app_users/, 'athletes link to app_users for self-read');
   assert.match(sql, /auth\.uid\(\)/, 'policies use auth.uid()');
