@@ -176,12 +176,10 @@ All new files; **no pre-existing file was modified** (18 files, +2,674 lines).
   - `7bbee2aba266e774c891c1f81bc72c993315e529` — backend modules, migrations, fixtures
   - `e2f055fcd376156adeb08fcd5aecc73ff9284c31` — automated tests (incl. the audit-rollback fix)
   - `5f78f2b11d70ebb94045c8b5a6baa07c072176c2` — audit, integration strategy, morning decisions
-  - *(this handoff — commit ID added after push; see note below)*
+  - `a577fd6ae4e493f74f97810a82815779eabb5210` — overnight handoff; correct 1-coach capacity figure to 77 seats/week
 - **Push / PR:** branch pushed to origin; draft PR opened, **not merged**.
-  PR link and final handoff commit ID are recorded in the closing report
-  to the parent agent (this file was written before the push so its
-  commit ID could not be self-referenced; `git log` on the branch is
-  authoritative).
+  PR link and any later correction-commit IDs are in the closing report
+  to the parent agent and in `git log` on the branch, which is authoritative.
 - **Working tree:** clean at handoff (`git status` clean, no uncommitted work).
 
 ## 7. UI preservation
