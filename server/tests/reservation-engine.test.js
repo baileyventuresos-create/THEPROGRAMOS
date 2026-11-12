@@ -307,6 +307,7 @@ test('migration 001 enforces the concurrency guarantee in SQL, not only in JS', 
   assert.match(sql, /CREATE EXTENSION IF NOT EXISTS citext/, 'citext extension must be created — app_users.email / guardians.email are CITEXT');
   assert.match(sql, /v_cap <= 0/, 'reserve_seat() must refuse a zero cap instead of waitlisting (infeasible-session guard)');
   assert.match(sql, /session_not_bookable: session/, 'reserve_seat() must raise a clean session_not_bookable exception on a zero cap');
+  assert.match(sql, /duplicate: athlete/, 'reserve_seat() must raise a clean duplicate exception for an athlete who already holds a confirmed seat (never waitlist a duplicate)');
   assert.match(sql, /Source of truth for cohort eligibility is the cohort_enrollments join/,
     'eligible_cohort_ids is documented as a snapshot of cohort_enrollments, not the source of truth');
   assert.match(sql, /Supabase is the SOLE backend/, '001 header must record the 2026-11-12 Supabase-only decision');
@@ -314,4 +315,39 @@ test('migration 001 enforces the concurrency guarantee in SQL, not only in JS', 
   // Verified 2026-11-12 by reading both migrations: only gen_random_uuid,
   // JSONB, partial indexes and plpgsql FOR UPDATE — all PG15-compatible.
   assert.match(sql, /gen_random_uuid\(\)/, 'uuid defaults use gen_random_uuid (PG13+, fine on the PG15 project)');
+});
+
+/* Cross-process race at the atomic gate (PostgresStore / reserve_seat()):
+ * the engine's in-process mutex cannot serialize two processes. When the
+ * gate returns 'waitlisted', the store throws RACE_WAITLISTED with the
+ * entry reserve_seat() already created; the engine must return the
+ * waitlist outcome — not an error, and not a second waitlist entry.
+ * (Fixed 2026-11-12 by the coordinator's verification pass.) */
+test('race loser at the atomic gate returns waitlisted (no duplicate entry, no error)', async () => {
+  const base = buildStore('memory');
+  const store = Object.create(base);
+  const raceWaitlist = { id: 'wl-race-1', sessionId: 'sess-yaka-0615', athleteId: 'ath-test-02', position: 1, status: 'waiting' };
+  store.insertReservation = async () => {
+    const e = new Error('Session filled during booking (reserve_seat outcome: waitlisted, position 1).');
+    e.code = 'RACE_WAITLISTED'; e.waitlist = raceWaitlist; throw e;
+  };
+  const eng = new ReservationEngine(store);
+  const r = await eng.reserve({ sessionId: 'sess-yaka-0615', athleteId: 'ath-test-02', actor: 'director' });
+  assert.equal(r.outcome, 'waitlisted');
+  assert.equal(r.waitlist.position, 1);
+  assert.equal(await store.countConfirmed('sess-yaka-0615'), 0);
+  assert.deepEqual(await store.listWaitlist('sess-yaka-0615'), [], 'engine must not insert a second waitlist entry');
+});
+
+test('already-waitlisted at the atomic gate rejects with ALREADY_WAITLISTED', async () => {
+  const base = buildStore('memory');
+  const store = Object.create(base);
+  store.insertReservation = async () => {
+    const e = new Error('Already waitlisted at position 1.');
+    e.code = 'ALREADY_WAITLISTED'; e.waitlist = { id: 'wl-1', position: 1, status: 'waiting' }; throw e;
+  };
+  const eng = new ReservationEngine(store);
+  await expectReject(
+    eng.reserve({ sessionId: 'sess-yaka-0615', athleteId: 'ath-test-02', actor: 'director' }),
+    'ALREADY_WAITLISTED');
 });

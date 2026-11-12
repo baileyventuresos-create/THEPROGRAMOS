@@ -50,8 +50,9 @@ any database. No Neon project was touched. No UI file was touched.
   `capacityFor`, `promoteWaitlist`; auth context `{ authUserId, role }`
   injected per call; actor is always the auth UID — client-supplied
   actor is ignored). `insertReservation()` calls `reserve_seat()` as
-  the final atomic gate (waitlisted race → `SESSION_NOT_BOOKABLE`;
-  unique violation → clean `DUPLICATE`). `package.json` added (private,
+  the final atomic gate (waitlisted race → `RACE_WAITLISTED` with the
+  entry attached, so the engine returns the waitlist outcome instead of
+  erroring the race loser; unique violation → clean `DUPLICATE`). `package.json` added (private,
   `pg` only, no scripts/build).
 - **Session-scheduling link** (new): `server/schedule-session.js`
   (`scheduleSession()`) turns a human-approved draft into the
@@ -75,28 +76,81 @@ any database. No Neon project was touched. No UI file was touched.
 | `6475421` | Postgres store + API + tests, `package.json` |
 | `ff5f9bf` | Session-scheduling link + tests |
 | _(docs commit — this commit, see `git log`)_ | Docs above + this handoff |
+| _(verification commit — see `git log`)_ | Coordinator verification: cross-process race fix (`RACE_WAITLISTED`), `reserve_seat()` `position` → `waitlist_position` rename + duplicate-confirmed guard, local-Postgres validation (below) |
 
 ## Tests
 
 `node --test server/tests/*.test.js assessment-engine/assessment-engine.test.js`
-— all green (47 pre-existing + 40 new = 87 total; see commit messages
+— all green (47 pre-existing + 44 new = 91 total; see commit messages
 for the per-file counts). `node --check` passes on every JS file touched
 or created. New coverage: zero-coach / equipment-shortfall / stored-cap-0
 refusals (no waitlist entry), cancel-on-infeasible, bulk promotion,
 empty-array ineligibility, legacy undefined eligibility, 001 SQL
-invariants (citext, `session_not_bookable` guard), 003 SQL invariants,
+invariants (citext, `session_not_bookable` guard, duplicate guard),
+003 SQL invariants,
 PostgresStore hydration + `reserve_seat()` gate + error mapping +
 transactions (fake injected Pool, no live DB), API role checks + actor
-integrity + cancel promotion + attendance (MemoryStore).
+integrity + cancel promotion + attendance (MemoryStore), cross-process
+race at the atomic gate (`RACE_WAITLISTED` returns waitlisted, no second
+entry; `ALREADY_WAITLISTED` propagates).
+
+## Verified against real PostgreSQL (throwaway local, 2026-11-12)
+
+Migrations 001 + 002 + 003 were executed against a THROWAWAY local
+Postgres 18.6 (binaries at `~/bin/local-stack/`, data dir in `/tmp`,
+port 54399, loopback only; Big Whiff local stack untouched). All three
+applied cleanly, re-apply is idempotent (22 tables, 58 policies after
+re-apply), and the server + data dir were removed afterwards. Results:
+- 22 tables (18 from 001 + 4 from 002); assessment seed 10 rows;
+  membership default price 14900; 58 RLS policies.
+- 8-spot / 6-registered rule: 6 books → 2 seats free; 2 more confirm;
+  9th/10th waitlist at positions 1/2; confirmed never exceeds 8.
+- SQL concurrency: two simultaneous `reserve_seat()` calls for one seat
+  → exactly 1 confirmed + 1 waitlisted. Two-process Node race through
+  the real engine + `PostgresStore` (cap-1 session) → exactly 1
+  confirmed + 1 waitlisted at position 1, no error, no duplicate entry.
+- Cap-0 session: `reserve_seat()` raises `session_not_bookable`.
+- Cancel + promotion through the API: cancelling a confirmed seat
+  promotes the first waitlisted athlete; confirmed stays at cap.
+- Session scheduled through `scheduleSession()` (cap 18) then booked
+  through the engine: 2 confirmed, `availableSeats` = 16.
+- RLS (stub `auth` schema standing in for Supabase Auth): parent sees
+  only their 1 athlete / 1 membership / own reservations, never others;
+  coach sees all 10 cohort athletes; director sees everything; `anon`
+  sees nothing; parent INSERT for own athlete allowed.
+- Assessment tables (002): one session + measured result (attempts
+  preserved) + derived interpretation insert cleanly.
+- API role checks against the live store: athlete `recordAttendance`
+  → `FORBIDDEN`; null auth → `UNAUTHENTICATED`.
+
+Two defects were found ONLY by this run and fixed in the verification
+commit (they are not in the 87-test baseline above — the string-assertion
+tests could not have caught them):
+1. `reserve_seat()` output column `position` is a reserved word —
+   `CREATE FUNCTION` failed on first apply. Renamed to
+   `waitlist_position` in 001 + `postgres-store.js` + tests.
+2. `reserve_seat()` had no duplicate-confirmed check: on a FULL session
+   an athlete who already held a seat was waitlisted (phantom entry).
+   Explicit guard added before the cap check; the store maps its
+   `duplicate:` exception to clean `DUPLICATE`.
+3. Cross-process race: the store used to throw `SESSION_NOT_BOOKABLE`
+   when the gate returned waitlisted, so a race loser got an error
+   instead of a waitlist spot. Now `RACE_WAITLISTED` (entry attached)
+   and the engine returns the waitlist outcome.
+
+Caveats: local Postgres is 18.6; Supabase runs 15.8.1.50. PG15
+compatibility rests on the feature review (no PG16+ constructs), not on
+a PG15 execution. The RLS checks used a stub `auth` schema (one-row
+`auth._uid` impersonation), not real Supabase Auth / JWTs.
 
 ## Still unverified — do not claim otherwise
 
-- Migrations 001 + 002 + 003 have NEVER been executed against any
-  PostgreSQL. No `psql`/server was available here, and nothing was
-  applied to TheProgramOS.
-- The RLS policies in 003 are the minimum viable set and have NOT been
-  exercised against live Supabase. Before any real athlete record is
-  stored, verify against TheProgramOS (after approval to apply):
+- Migrations 001 + 002 + 003 have NOT been applied to TheProgramOS
+  (production Supabase). Applying them needs Marcus's explicit approval.
+- The RLS policies in 003 are the minimum viable set. They were
+  exercised locally (see above), but NOT against live Supabase. Before
+  any real athlete record is stored, repeat the checks against
+  TheProgramOS (after approval to apply):
   1. Apply 001 + 002 + 003 in order via the dashboard SQL editor.
   2. Two concurrent `reserve_seat()` calls for one seat: exactly one
      confirms (same test the SQLite suite runs).

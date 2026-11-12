@@ -27,11 +27,14 @@
  * as the final gate, so capacity is enforced transactionally in Postgres
  * even if the JS checks race. reserve_seat() outcomes:
  *   - 'confirmed' -> the reservation row is returned.
- *   - 'waitlisted' / 'already_waitlisted' -> the session filled between
- *     the engine's check and the insert; throws SESSION_NOT_BOOKABLE so
- *     the caller can retry as a waitlist join instead of silently
- *     succeeding. (The engine only calls insertReservation when it
- *     believes a seat is free, so this is a race, not the normal path.)
+ *   - 'waitlisted' -> the seat vanished between the engine's check and
+ *     the atomic gate; reserve_seat() ALREADY inserted the waitlist entry
+ *     (and its WAITLISTED audit row). The store throws RACE_WAITLISTED
+ *     with the created entry attached (.waitlist) so the engine can return
+ *     { outcome: 'waitlisted' } WITHOUT inserting a second entry.
+ *   - 'already_waitlisted' -> the athlete was already waiting; throws
+ *     ALREADY_WAITLISTED (same code the engine uses on its own full
+ *     branch) with the existing entry attached.
  *   - unique violation (23505) on the confirmed index -> throws DUPLICATE
  *     with a clean code instead of a raw Postgres error.
  *   - reserve_seat()'s own session_not_bookable exception -> rethrown as
@@ -345,6 +348,7 @@ class PostgresStore {
         [r.sessionId, r.athleteId, r.actor || 'system']);
     } catch (e) {
       if (e && e.code === '23505') throw err('DUPLICATE', 'Athlete already holds a confirmed reservation for this session.');
+      if (e && /duplicate:/i.test(e.message || '')) throw err('DUPLICATE', 'Athlete already holds a confirmed reservation for this session.');
       if (e && /session_not_bookable/i.test(e.message || '')) {
         throw err('SESSION_NOT_BOOKABLE', 'Session has no bookable capacity.');
       }
@@ -357,10 +361,38 @@ class PostgresStore {
       return row;
     }
     // 'waitlisted' / 'already_waitlisted': the seat vanished between the
-    // engine's check and the atomic gate. Refuse cleanly; the caller can
-    // retry as a waitlist join — never silently confirm or waitlist here.
-    throw err('SESSION_NOT_BOOKABLE',
-      `Session filled during booking (reserve_seat outcome: ${gate.outcome}); retry to join the waitlist.`);
+    // engine's check and the atomic gate. reserve_seat() already inserted
+    // the waitlist entry (and its WAITLISTED audit row) — never insert a
+    // second one here. Throw with the entry attached so the engine can
+    // return { outcome: 'waitlisted' } for the race loser instead of an
+    // error. (Fixed 2026-11-12: previously this threw SESSION_NOT_BOOKABLE,
+    // so a cross-process race loser got an error instead of a waitlist spot.)
+    if (gate.outcome === 'waitlisted' || gate.outcome === 'already_waitlisted') {
+      let wlRow = null;
+      if (gate.waitlist_id) {
+        const { rows } = await this._query(
+          `SELECT * FROM waitlist_entries WHERE id = $1`, [gate.waitlist_id]);
+        wlRow = rows[0] || null;
+      } else {
+        const { rows } = await this._query(
+          `SELECT * FROM waitlist_entries WHERE session_id = $1 AND athlete_id = $2 AND status = 'waiting' ORDER BY position ASC LIMIT 1`,
+          [r.sessionId, r.athleteId]);
+        wlRow = rows[0] || null;
+      }
+      const waitlist = mapWaitlist(wlRow) || {
+        id: gate.waitlist_id || null, sessionId: r.sessionId, athleteId: r.athleteId,
+        position: gate.waitlist_position ?? null, status: 'waiting',
+      };
+      if (gate.outcome === 'already_waitlisted') {
+        const e = err('ALREADY_WAITLISTED', `Already waitlisted at position ${waitlist.position}.`);
+        e.waitlist = waitlist;
+        throw e;
+      }
+      const e = err('RACE_WAITLISTED', `Session filled during booking (reserve_seat outcome: waitlisted, position ${waitlist.position}).`);
+      e.waitlist = waitlist;
+      throw e;
+    }
+    throw err('SESSION_NOT_BOOKABLE', `Unexpected reserve_seat outcome: ${gate.outcome}.`);
   }
 
   async updateReservation(id, patch) {

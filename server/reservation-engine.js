@@ -230,8 +230,23 @@ class ReservationEngine {
           detail: `Session full (${confirmed}/${effectiveCap}); position ${wait.position}.` });
         return { outcome: 'waitlisted', waitlist: wait, capacity: effectiveCap, confirmed };
       }
-      const reservation = await this.store.insertReservation({
-        sessionId, athleteId, status: 'confirmed', actor: actor || 'system' });
+      let reservation;
+      try {
+        reservation = await this.store.insertReservation({
+          sessionId, athleteId, status: 'confirmed', actor: actor || 'system' });
+      } catch (e) {
+        // Cross-process race: the last seat vanished between this engine's
+        // check and the atomic gate (PostgresStore: reserve_seat() already
+        // created the waitlist entry + its WAITLISTED audit row). Return
+        // the waitlist outcome with that entry — never insert a second
+        // entry and never error the race loser. No extra engine audit here:
+        // reserve_seat() already wrote the WAITLISTED row. (Fixed
+        // 2026-11-12; the in-process mutex covers same-process races.)
+        if (e && e.code === 'RACE_WAITLISTED') {
+          return { outcome: 'waitlisted', waitlist: e.waitlist || null, capacity: effectiveCap, confirmed };
+        }
+        throw e;
+      }
       await this.store.insertAudit({ entityType: 'reservation', entityId: reservation.id,
         action: 'RESERVED', actor: actor || 'system',
         detail: `Seat ${confirmed + 1}/${effectiveCap} for session ${sessionId}.` });

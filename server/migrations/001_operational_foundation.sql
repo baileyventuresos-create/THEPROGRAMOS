@@ -10,7 +10,13 @@
 -- docs/MORNING_DECISIONS.md and docs/SUPABASE_HANDOFF.md.
 -- Verified 2026-11-12: no PG16+ features are used (gen_random_uuid,
 -- JSONB, partial indexes, plpgsql FOR UPDATE are all PG15-compatible);
--- the project runs Postgres 15.8.1.50.
+-- the project runs Postgres 15.8.1.50. Executed 2026-11-12 against a
+-- throwaway local Postgres 18.6 (all three migrations + concurrency /
+-- RLS checks passed; see docs/SUPABASE_HANDOFF.md). Two fixes came out
+-- of that run: reserve_seat()'s output column is waitlist_position
+-- (renamed from position — a reserved word; CREATE FUNCTION failed),
+-- and an explicit duplicate-confirmed guard was added (a full session
+-- used to waitlist an athlete who already held a seat).
 --
 -- Design notes
 -- * Cohort enrollment cap (cohorts.enrollment_cap) and session reservation
@@ -264,7 +270,7 @@ CREATE INDEX IF NOT EXISTS idx_audit_entity ON operational_audit_events (entity_
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION reserve_seat(
   p_session_id UUID, p_athlete_id UUID, p_actor TEXT
-) RETURNS TABLE (outcome TEXT, reservation_id UUID, waitlist_id UUID, position INT) AS $$
+) RETURNS TABLE (outcome TEXT, reservation_id UUID, waitlist_id UUID, waitlist_position INT) AS $$
 DECLARE
   v_cap INT;
   v_confirmed INT;
@@ -274,6 +280,16 @@ DECLARE
 BEGIN
   SELECT capacity_effective INTO v_cap FROM training_sessions WHERE id = p_session_id FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'SESSION_NOT_FOUND'; END IF;
+  -- Duplicate guard (fixed 2026-11-12, found by local-PG verification):
+  -- an athlete who already holds a confirmed seat must never be
+  -- waitlisted for the same session. The unique index only fires on the
+  -- INSERT path (a free seat); on a FULL session the old code fell through
+  -- to the waitlist branch and created a phantom waitlist entry for an
+  -- athlete who already had a seat. Check explicitly, before the cap.
+  IF EXISTS (SELECT 1 FROM reservations
+             WHERE session_id = p_session_id AND athlete_id = p_athlete_id AND status = 'confirmed') THEN
+    RAISE EXCEPTION 'duplicate: athlete % already holds a confirmed reservation for session %.', p_athlete_id, p_session_id;
+  END IF;
   -- Infeasible sessions refuse to book (2026-11-12 fix): a cap of 0 means
   -- zero coaches or an equipment shortfall — waitlisting everyone would
   -- silently promise seats that can never exist. The engine enforces the
@@ -313,9 +329,8 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Row-level security: enable on every table holding athlete data.
--- Policies below are the starting point (authenticated staff only by
--- default); role-specific policies (director/coach/parent scoping) must
--- be completed before any real athlete record is stored. Do NOT weaken.
+-- Role-scoped policies are completed in migration 003 (director /
+-- coach / parent / athlete, via auth.uid() + app_users). Do NOT weaken.
 ALTER TABLE app_users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE guardians ENABLE ROW LEVEL SECURITY;
 ALTER TABLE athletes ENABLE ROW LEVEL SECURITY;

@@ -105,7 +105,7 @@ test('getMembership returns the latest membership; coachAvailable reads availabi
 
 test('insertReservation calls reserve_seat() as the atomic gate and returns the confirmed row', async () => {
   const pool = makePool([
-    [/reserve_seat/, () => ({ rows: [{ outcome: 'confirmed', reservation_id: 'res-1', waitlist_id: null, position: null }] })],
+    [/reserve_seat/, () => ({ rows: [{ outcome: 'confirmed', reservation_id: 'res-1', waitlist_id: null, waitlist_position: null }] })],
     [/FROM reservations WHERE id/, () => ({ rows: [RES_ROW] })],
   ]);
   const store = new PostgresStore(pool);
@@ -116,19 +116,41 @@ test('insertReservation calls reserve_seat() as the atomic gate and returns the 
   assert.deepEqual(pool.calls[0].params, ['sess-yaka-0615', 'ath-1', 'auth-director-1']);
 });
 
-test('insertReservation: waitlisted gate outcome throws SESSION_NOT_BOOKABLE (race, not a silent waitlist)', async () => {
+test('insertReservation: waitlisted gate outcome throws RACE_WAITLISTED with the created entry attached (engine returns waitlisted, no second entry)', async () => {
   const pool = makePool([
-    [/reserve_seat/, () => ({ rows: [{ outcome: 'waitlisted', reservation_id: null, waitlist_id: 'wl-1', position: 1 }] })],
+    [/reserve_seat/, () => ({ rows: [{ outcome: 'waitlisted', reservation_id: null, waitlist_id: 'wl-1', waitlist_position: 1 }] })],
+    [/FROM waitlist_entries WHERE id/, () => ({ rows: [{ id: 'wl-1', session_id: 'sess-yaka-0615', athlete_id: 'ath-1', position: 1, status: 'waiting', promoted_reservation_id: null, created_at: '2027-06-15T16:30:00.000Z' }] })],
   ]);
   const store = new PostgresStore(pool);
   await assert.rejects(
     store.insertReservation({ sessionId: 'sess-yaka-0615', athleteId: 'ath-1', status: 'confirmed', actor: 'auth-director-1' }),
-    (e) => { assert.equal(e.code, 'SESSION_NOT_BOOKABLE'); return true; });
+    (e) => { assert.equal(e.code, 'RACE_WAITLISTED'); assert.equal(e.waitlist.id, 'wl-1'); assert.equal(e.waitlist.position, 1); return true; });
+});
+
+test('insertReservation: already_waitlisted gate outcome throws ALREADY_WAITLISTED with the existing entry attached', async () => {
+  const pool = makePool([
+    [/reserve_seat/, () => ({ rows: [{ outcome: 'already_waitlisted', reservation_id: null, waitlist_id: null, waitlist_position: 2 }] })],
+    [/FROM waitlist_entries WHERE session_id/, () => ({ rows: [{ id: 'wl-0', session_id: 'sess-yaka-0615', athlete_id: 'ath-1', position: 2, status: 'waiting', promoted_reservation_id: null, created_at: '2027-06-15T16:30:00.000Z' }] })],
+  ]);
+  const store = new PostgresStore(pool);
+  await assert.rejects(
+    store.insertReservation({ sessionId: 'sess-yaka-0615', athleteId: 'ath-1', status: 'confirmed', actor: 'auth-director-1' }),
+    (e) => { assert.equal(e.code, 'ALREADY_WAITLISTED'); assert.equal(e.waitlist.position, 2); return true; });
 });
 
 test('insertReservation: duplicate unique violation (23505) becomes a clean DUPLICATE code', async () => {
   const pool = makePool([
     [/reserve_seat/, () => { const e = new Error('duplicate key value violates unique constraint "uq_reservation_confirmed"'); e.code = '23505'; throw e; }],
+  ]);
+  const store = new PostgresStore(pool);
+  await assert.rejects(
+    store.insertReservation({ sessionId: 'sess-yaka-0615', athleteId: 'ath-1', status: 'confirmed', actor: 'auth-director-1' }),
+    (e) => { assert.equal(e.code, 'DUPLICATE'); return true; });
+});
+
+test('insertReservation: reserve_seat duplicate exception becomes a clean DUPLICATE code', async () => {
+  const pool = makePool([
+    [/reserve_seat/, () => { throw new Error('duplicate: athlete ath-1 already holds a confirmed reservation for session sess-yaka-0615.'); }],
   ]);
   const store = new PostgresStore(pool);
   await assert.rejects(
