@@ -103,8 +103,8 @@ Implemented (code + tests, on the branch — not designs):
 
 Designs / placeholders / proposed future work (NOT implemented): the
 backend itself (a Supabase project named TheProgramOS exists — ref
-`rkgdwqgmldznczikrjip`, found 2026-11-11 — but its schema is uninspected
-and no migration has been applied to it), the authenticated
+`rkgdwqgmldznczikrjip` — inspected read-only 2026-11-12: public schema
+empty, 0 auth users, no migration applied yet), the authenticated
 API layer, any UI integration (booking surfaces, Director capacity view),
 any data import, billing, deployment. See §9.
 
@@ -237,9 +237,10 @@ Model (computed by `server/fixtures/generate-75-scenario.js`, output in
    visibility, backend choice, pricing confirmation, staffing, facility
    occupancy, assessment validation, merge/deploy. Nothing below starts
    without #2 (backend) at minimum.
-2. **Scratch backend + migration validation** — apply 001+002 to a scratch
-   Postgres/Supabase project; run the concurrency checks against
-   `reserve_seat()`; complete role-scoped RLS policies.
+2. **Apply migrations to TheProgramOS** — inspected read-only
+   2026-11-12 and verified empty (0 tables in public, 0 auth users), so
+   001+002 have nothing to collide with; run the concurrency checks
+   against `reserve_seat()`; complete role-scoped RLS policies.
 3. **API layer** — thin authenticated service over the engine (reserve,
    cancel, seats, attendance, capacity); the engine is transport-agnostic.
 4. **Session-scheduling link** — store `capacityInput` on each scheduled
@@ -261,8 +262,9 @@ See `docs/MORNING_DECISIONS.md` in full. Headlines: (1) repo is public
 vs The Program non-public — make private or confirm public; (2) a
 Supabase project named TheProgramOS already exists (ref
 `rkgdwqgmldznczikrjip`, BigWiffWiffleBallLeague org, Pro, us-east-2,
-created 13 Oct 2026) — confirm it is the intended backend and approve
-inspecting its schema before any migration is applied; (3) migrations
+created 13 Oct 2026) — inspected read-only 2026-11-12 and verified
+EMPTY (0 tables in public, 0 auth users); approve applying migrations
+001+002 to it as the dev target, or direct a separate scratch project; (3) migrations
 are reviewed but unexecuted against Postgres; (4) confirm $149 flat vs
 the prototype's "$149 / $179"; (5) billing activation is a separate
 decision — nothing activated; (6) who the 2nd/3rd coaches are — the

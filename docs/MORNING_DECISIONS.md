@@ -19,19 +19,21 @@ continued around every item; nothing is stalled except the item itself.
 
 ## 2. Backend choice: a Supabase project EXISTS — confirm it is the intended one
 
-- **Context (corrected 2026-11-11, after the overnight run):** A Supabase
+- **Context (corrected 2026-11-11, inspected 2026-11-12):** A Supabase
   project named **TheProgramOS** DOES exist — ref
   `rkgdwqgmldznczikrjip`, organization **BigWiffWiffleBallLeague** (Pro
   plan), region **us-east-2**, created **13 Oct 2026**, status ACTIVE.
-  Found by a read-only dashboard check on 2026-11-11; its tables/schema
-  have NOT been inspected, so it is unknown whether it is empty, holds
-  prototype data, or holds anything else. The overnight audit's "no
-  backend project exists" claim was wrong — the repo has no backend, but
-  the project exists in Supabase. No migrations have been applied to it.
-- **Decision needed:** Confirm TheProgramOS is the intended backend for
-  THE PROGRAM OS, and approve inspecting its current schema, then using
-  it (or a separate scratch project under the same account) as the
-  scratch/dev target for migrations 001 + 002.
+  Read-only dashboard inspection on 2026-11-12 found it **EMPTY**: 0
+  tables in the `public` schema (exact count), 0 auth users (exact
+  count), no storage buckets, no edge functions, no connected repo.
+  Postgres 15.8.1.50, Micro compute, Healthy. Only Supabase's own system
+  tables exist (auth/realtime/storage/vault). No real athlete data, no
+  prototype data — nothing for migrations 001 + 002 to collide with
+  (all `CREATE TABLE IF NOT EXISTS`, standard SQL, no Postgres 16+
+  features). No migrations have been applied to it.
+- **Decision needed:** Approve applying migrations 001 + 002 to
+  TheProgramOS as the dev/scratch target, or direct a separate scratch
+  project instead. Production use of this project is a separate decision.
 - **Blocked until decided:** applying migrations anywhere; building the
   API layer; any UI integration with live data.
 
