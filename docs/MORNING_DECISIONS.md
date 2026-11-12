@@ -71,7 +71,7 @@ continued around every item; nothing is stalled except the item itself.
   third coaches are at launch — hired, parent volunteers, Marcus — is
   open." The 75-athlete capacity model (205 weekly seats vs 150 demand)
   is **conditional on 3-coach staffing**; with 1 coach per session the
-  same cohorts supply only ~85 weekly seats and the model does not fit.
+  same cohorts supply only 77 weekly seats and the model does not fit (2 coaches supply 149 — just short of the 150 demand).
 - **Decision needed:** Staffing plan per location (hired coaches, subs,
   volunteers) and how coach unavailability is covered (the engine blocks
   booking when a scheduled coach is unavailable — it never silently
