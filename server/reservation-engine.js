@@ -101,18 +101,43 @@ class ReservationEngine {
 
   /* Effective capacity for a session: the stored computed cap when the
    * session was scheduled; recomputed live when capacity inputs are
-   * present so a changed coach roster/equipment is honoured. */
+   * present so a changed coach roster/equipment is honoured.
+   *
+   * INFEASIBLE-SESSION GUARD (fixed 2026-11-12): a session whose computed
+   * capacity is not feasible, or whose effective cap is 0 (zero coaches,
+   * equipment shortfall), REFUSES to book — it never silently waitlists.
+   * A waitlist entry on such a session would promise a seat that can
+   * never exist. reserve_seat() in migrations/001 enforces the same
+   * guard atomically in Postgres for direct callers. */
   async capacityFor(session) {
     if (session.capacityInput) {
       const d = computeSessionCapacity(session.capacityInput);
+      if (!d.feasible || d.effectiveCap <= 0) {
+        throw err('SESSION_NOT_BOOKABLE',
+          `Session is not bookable: ${d.infeasibleReasons.join(' ') || 'computed capacity is 0.'}`);
+      }
       return { effectiveCap: d.effectiveCap, decision: d };
     }
     if (Number.isFinite(+session.capacityEffective)) {
+      if (+session.capacityEffective <= 0) {
+        throw err('SESSION_NOT_BOOKABLE', 'Session has an effective capacity of 0 (no coach or equipment shortfall); it cannot be booked.');
+      }
       return { effectiveCap: +session.capacityEffective, decision: null };
     }
     throw err('SESSION_NOT_BOOKABLE', 'Session has no computed capacity. Schedule it through the capacity adapter first — capacity is never guessed.');
   }
 
+  /* Cohort eligibility — SOURCE OF TRUTH (decided 2026-11-12):
+   * the cohort_enrollments join table is the single source of truth.
+   * athletes.eligible_cohort_ids is only a hydrated snapshot of it: the
+   * Postgres store (server/postgres-store.js) builds the array from
+   * cohort_enrollments (status='enrolled') at read time. The engine
+   * therefore treats the array as authoritative when present: an array —
+   * INCLUDING an empty array — requires the session's cohort to be listed
+   * (empty array = eligible for no cohort). The check is skipped ONLY
+   * when the field is undefined/null, i.e. legacy in-memory fixtures
+   * that predate the enrollment model. Never grant eligibility by editing
+   * the array; insert a cohort_enrollments row. */
   async eligibility(session, athlete, dateISO) {
     const checks = [];
     const membership = await this.store.getMembership(athlete.id, dateISO);
@@ -231,7 +256,16 @@ class ReservationEngine {
 
   async _promoteNext(sessionId, actor) {
     const session = await this.store.getSession(sessionId);
-    const { effectiveCap } = await this.capacityFor(session);
+    let effectiveCap;
+    try {
+      ({ effectiveCap } = await this.capacityFor(session));
+    } catch (e) {
+      // Session became infeasible (cap 0 / no computed capacity): nothing
+      // can be promoted, but cancel() must still succeed — a cancellation
+      // is not blocked by the session no longer being bookable.
+      if (e && e.code === 'SESSION_NOT_BOOKABLE') return { reservation: null, skipped: [] };
+      throw e;
+    }
     const confirmed = await this.store.countConfirmed(sessionId);
     if (confirmed >= effectiveCap) return { reservation: null, skipped: [] };
     const skipped = [];
@@ -258,6 +292,35 @@ class ReservationEngine {
       return { reservation, skipped };
     }
     return { reservation: null, skipped };
+  }
+
+  /* Bulk promotion after a capacity increase (e.g. after
+   * recalculateCapacity() raises a session's cap): promote waiting
+   * athletes, in order, until the session is full or the waitlist is
+   * exhausted. cancel() promotes only one; this is the explicit path for
+   * filling newly available seats. Each promotion re-checks eligibility
+   * and conflicts via _promoteNext. Returns { promoted: [...], skipped: [...] }. */
+  async promoteWaitlist(sessionId, actor) {
+    const promoted = [];
+    const skipped = [];
+    for (;;) {
+      const session = await this.store.getSession(sessionId);
+      if (!session) throw err('SESSION_NOT_FOUND');
+      let effectiveCap;
+      try {
+        ({ effectiveCap } = await this.capacityFor(session));
+      } catch (e) {
+        if (e && e.code === 'SESSION_NOT_BOOKABLE') break; // infeasible: nothing to promote
+        throw e;
+      }
+      const confirmed = await this.store.countConfirmed(sessionId);
+      if (confirmed >= effectiveCap) break;
+      const next = await this._withLock(sessionId, () => this._tx(() => this._promoteNext(sessionId, actor)));
+      skipped.push(...next.skipped);
+      if (!next.reservation) break;
+      promoted.push(next.reservation);
+    }
+    return { promoted, skipped };
   }
 
   async _hasConflict(athleteId, session) {

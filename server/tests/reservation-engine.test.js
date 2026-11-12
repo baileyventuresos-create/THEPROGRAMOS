@@ -190,6 +190,110 @@ for (const kind of ['memory', 'sqlite']) {
     const eng = new ReservationEngine(store);
     await expectReject(eng.reserve({ sessionId: 'sess-nocap', athleteId: 'ath-test-01', actor: 'director' }), 'SESSION_NOT_BOOKABLE');
   });
+
+  test(`[${kind}] infeasible session refuses to book: zero coaches (no waitlist entry created)`, async () => {
+    const store = buildStore(kind);
+    const zeroCoach = session({ id: 'sess-zero-coach', locationId: 'CLE', space: 'Gym', startTime: '4:00 PM',
+      coaches: [], capacityInput: { template: { id: 'p60', dur: 60, phases: { build: 24 } }, coachesAvailable: 0 } });
+    delete zeroCoach.capacityEffective;
+    addSession(store, kind, zeroCoach);
+    const eng = new ReservationEngine(store);
+    await expectReject(eng.reserve({ sessionId: 'sess-zero-coach', athleteId: 'ath-test-01', actor: 'director' }), 'SESSION_NOT_BOOKABLE');
+    assert.equal((await store.listWaitlist('sess-zero-coach')).length, 0, 'refused booking must not create a waitlist entry');
+    assert.equal(await store.countConfirmed('sess-zero-coach'), 0);
+    await expectReject(eng.availableSeats('sess-zero-coach'), 'SESSION_NOT_BOOKABLE');
+  });
+
+  test(`[${kind}] infeasible session refuses to book: equipment shortfall`, async () => {
+    const store = buildStore(kind);
+    const shortfall = session({ id: 'sess-shortfall', locationId: 'CLE', space: 'Gym', startTime: '4:00 PM',
+      coaches: ['marcus'],
+      capacityInput: { template: { id: 'p60', dur: 60, phases: { build: 24 } }, coachesAvailable: 1,
+        equipment: [{ item: 'cones', have: 0, needPerAthlete: 4 }] } });
+    delete shortfall.capacityEffective;
+    addSession(store, kind, shortfall);
+    const eng = new ReservationEngine(store);
+    await expectReject(eng.reserve({ sessionId: 'sess-shortfall', athleteId: 'ath-test-01', actor: 'director' }), 'SESSION_NOT_BOOKABLE');
+    assert.equal((await store.listWaitlist('sess-shortfall')).length, 0, 'no waitlist entry on an infeasible session');
+  });
+
+  test(`[${kind}] stored effective capacity of 0 refuses to book`, async () => {
+    const store = buildStore(kind);
+    const zeroCap = session({ id: 'sess-zero-cap', locationId: 'CLE', space: 'Gym', startTime: '4:00 PM', coaches: ['marcus'], capacityEffective: 0 });
+    addSession(store, kind, zeroCap);
+    const eng = new ReservationEngine(store);
+    await expectReject(eng.reserve({ sessionId: 'sess-zero-cap', athleteId: 'ath-test-01', actor: 'director' }), 'SESSION_NOT_BOOKABLE');
+    assert.equal((await store.listWaitlist('sess-zero-cap')).length, 0);
+  });
+
+  test(`[${kind}] cancel still succeeds when the session has become infeasible (no promotion attempted)`, async () => {
+    const store = buildStore(kind);
+    const eng = new ReservationEngine(store);
+    const r = await eng.reserve({ sessionId: 'sess-yaka-0615', athleteId: 'ath-test-01', actor: 'director' });
+    // Coach roster drops to zero after booking: stored cap is now 0.
+    const s = await store.getSession('sess-yaka-0615');
+    s.capacityInput = { template: { id: 'p60', dur: 60, phases: { build: 24 } }, coachesAvailable: 0 };
+    delete s.capacityEffective;
+    if (kind === 'memory') store.sessions.set(s.id, s);
+    else store.db.prepare('INSERT OR REPLACE INTO sessions (id, data) VALUES (?, ?)').run(s.id, JSON.stringify(s));
+    const out = await eng.cancel({ reservationId: r.reservation.id, actor: 'director', reason: 'session infeasible' });
+    assert.equal(out.cancelled.status, 'cancelled');
+    assert.equal(out.promoted, null);
+  });
+
+  test(`[${kind}] promoteWaitlist fills seats opened by a capacity increase`, async () => {
+    const store = buildStore(kind);
+    const eng = new ReservationEngine(store);
+    await eng.reserve({ sessionId: 'sess-yaka-0615', athleteId: 'ath-test-01', actor: 'director' });
+    await eng.reserve({ sessionId: 'sess-yaka-0615', athleteId: 'ath-test-02', actor: 'director' });
+    await eng.reserve({ sessionId: 'sess-yaka-0615', athleteId: 'ath-test-07', actor: 'director' }); // waitlisted
+    await eng.reserve({ sessionId: 'sess-yaka-0615', athleteId: 'ath-test-08', actor: 'director' }); // waitlisted
+    // Capacity raised 2 -> 4 (e.g. a coach added): bulk-promote both.
+    const s = await store.getSession('sess-yaka-0615');
+    s.capacityEffective = 4;
+    if (kind === 'memory') store.sessions.set(s.id, s);
+    else store.db.prepare('INSERT OR REPLACE INTO sessions (id, data) VALUES (?, ?)').run(s.id, JSON.stringify(s));
+    const out = await eng.promoteWaitlist('sess-yaka-0615', 'director');
+    assert.deepEqual(out.promoted.map(r => r.athleteId), ['ath-test-07', 'ath-test-08']);
+    assert.equal(await store.countConfirmed('sess-yaka-0615'), 4);
+  });
+
+  test(`[${kind}] athlete with an empty eligibility array cannot book (empty = eligible for no cohort)`, async () => {
+    const store = buildStore(kind);
+    const emptyElig = { id: 'ath-test-09', name: 'Test Athlete 09', age: 10, eligibleCohortIds: [], restrictions: [] };
+    if (kind === 'memory') store.athletes.set(emptyElig.id, JSON.parse(JSON.stringify(emptyElig)));
+    else store.db.prepare('INSERT OR REPLACE INTO athletes (id, data) VALUES (?, ?)').run(emptyElig.id, JSON.stringify(emptyElig));
+    // Membership is required before the cohort check is reached: reuse an
+    // active membership row by pointing it at the new athlete.
+    if (kind === 'memory') {
+      const m = store.memberships.get('mem-test-02');
+      store.memberships.set('mem-test-09', Object.assign({}, m, { id: 'mem-test-09', athleteId: 'ath-test-09' }));
+    } else {
+      const m = JSON.parse(store.db.prepare('SELECT data FROM memberships WHERE id = ?').get('mem-test-02').data);
+      store.db.prepare('INSERT OR REPLACE INTO memberships (id, athlete_id, data) VALUES (?, ?, ?)')
+        .run('mem-test-09', 'ath-test-09', JSON.stringify(Object.assign({}, m, { id: 'mem-test-09', athleteId: 'ath-test-09' })));
+    }
+    const eng = new ReservationEngine(store);
+    await expectReject(eng.reserve({ sessionId: 'sess-yaka-0615', athleteId: 'ath-test-09', actor: 'director' }), 'INELIGIBLE_COHORT');
+  });
+
+  test(`[${kind}] athlete with undefined eligibility (legacy fixture) still books — check skipped only then`, async () => {
+    const store = buildStore(kind);
+    const legacy = { id: 'ath-test-10', name: 'Test Athlete 10', age: 10, restrictions: [] }; // no eligibleCohortIds field
+    if (kind === 'memory') store.athletes.set(legacy.id, JSON.parse(JSON.stringify(legacy)));
+    else store.db.prepare('INSERT OR REPLACE INTO athletes (id, data) VALUES (?, ?)').run(legacy.id, JSON.stringify(legacy));
+    if (kind === 'memory') {
+      const m = store.memberships.get('mem-test-02');
+      store.memberships.set('mem-test-10', Object.assign({}, m, { id: 'mem-test-10', athleteId: 'ath-test-10' }));
+    } else {
+      const m = JSON.parse(store.db.prepare('SELECT data FROM memberships WHERE id = ?').get('mem-test-02').data);
+      store.db.prepare('INSERT OR REPLACE INTO memberships (id, athlete_id, data) VALUES (?, ?, ?)')
+        .run('mem-test-10', 'ath-test-10', JSON.stringify(Object.assign({}, m, { id: 'mem-test-10', athleteId: 'ath-test-10' })));
+    }
+    const eng = new ReservationEngine(store);
+    const r = await eng.reserve({ sessionId: 'sess-yaka-0615', athleteId: 'ath-test-10', actor: 'director' });
+    assert.equal(r.outcome, 'confirmed');
+  });
 }
 
 test('migration 001 enforces the concurrency guarantee in SQL, not only in JS', () => {
@@ -200,4 +304,14 @@ test('migration 001 enforces the concurrency guarantee in SQL, not only in JS', 
   assert.match(sql, /enrollment_cap/, 'cohort enrollment cap exists as its own field');
   assert.match(sql, /price_cents INT NOT NULL DEFAULT 14900/, 'membership price is the owner-fixed $149');
   assert.match(sql, /ENABLE ROW LEVEL SECURITY/, 'RLS is enabled on athlete tables');
+  assert.match(sql, /CREATE EXTENSION IF NOT EXISTS citext/, 'citext extension must be created — app_users.email / guardians.email are CITEXT');
+  assert.match(sql, /v_cap <= 0/, 'reserve_seat() must refuse a zero cap instead of waitlisting (infeasible-session guard)');
+  assert.match(sql, /session_not_bookable: session/, 'reserve_seat() must raise a clean session_not_bookable exception on a zero cap');
+  assert.match(sql, /Source of truth for cohort eligibility is the cohort_enrollments join/,
+    'eligible_cohort_ids is documented as a snapshot of cohort_enrollments, not the source of truth');
+  assert.match(sql, /Supabase is the SOLE backend/, '001 header must record the 2026-11-12 Supabase-only decision');
+  assert.match(sql, /rkgdwqgmldznczikrjip/, '001 header must record the inspected TheProgramOS project ref');
+  // Verified 2026-11-12 by reading both migrations: only gen_random_uuid,
+  // JSONB, partial indexes and plpgsql FOR UPDATE — all PG15-compatible.
+  assert.match(sql, /gen_random_uuid\(\)/, 'uuid defaults use gen_random_uuid (PG13+, fine on the PG15 project)');
 });
