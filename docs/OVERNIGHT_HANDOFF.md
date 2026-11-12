@@ -102,7 +102,9 @@ Implemented (code + tests, on the branch — not designs):
   `docs/MORNING_DECISIONS.md`, `server/README.md`.
 
 Designs / placeholders / proposed future work (NOT implemented): the
-backend itself (no Supabase/Postgres project created), the authenticated
+backend itself (a Supabase project named TheProgramOS exists — ref
+`rkgdwqgmldznczikrjip`, found 2026-11-11 — but its schema is uninspected
+and no migration has been applied to it), the authenticated
 API layer, any UI integration (booking surfaces, Director capacity view),
 any data import, billing, deployment. See §9.
 
@@ -256,8 +258,11 @@ Model (computed by `server/fixtures/generate-75-scenario.js`, output in
 ## 10. Owner decisions
 
 See `docs/MORNING_DECISIONS.md` in full. Headlines: (1) repo is public
-vs The Program non-public — make private or confirm public; (2) approve a
-backend (Supabase/Postgres recommended) — none exists yet; (3) migrations
+vs The Program non-public — make private or confirm public; (2) a
+Supabase project named TheProgramOS already exists (ref
+`rkgdwqgmldznczikrjip`, BigWiffWiffleBallLeague org, Pro, us-east-2,
+created 13 Oct 2026) — confirm it is the intended backend and approve
+inspecting its schema before any migration is applied; (3) migrations
 are reviewed but unexecuted against Postgres; (4) confirm $149 flat vs
 the prototype's "$149 / $179"; (5) billing activation is a separate
 decision — nothing activated; (6) who the 2nd/3rd coaches are — the

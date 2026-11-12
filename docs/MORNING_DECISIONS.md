@@ -17,16 +17,21 @@ continued around every item; nothing is stalled except the item itself.
   to this repo; any future UI integration work that touches real records.
 - **Overnight action:** visibility NOT changed; recorded here only.
 
-## 2. Backend choice: no backend project exists yet
+## 2. Backend choice: a Supabase project EXISTS — confirm it is the intended one
 
-- **Context:** The prototype has no backend, database, or auth. This
-  work adds version-controlled PostgreSQL migrations (`server/migrations/
-  001` + `002`), a reservation engine, and local SQLite/Memory stores —
-  but no live database was created and none was assumed.
-- **Decision needed:** Approve a backend, and which one? Recommendation
-  in `docs/INTEGRATION_STRATEGY.md`: Supabase/PostgreSQL (same pattern
-  already used for Big Whiff). If approved: create a **scratch/dev**
-  project first; production comes later as a separate decision.
+- **Context (corrected 2026-11-11, after the overnight run):** A Supabase
+  project named **TheProgramOS** DOES exist — ref
+  `rkgdwqgmldznczikrjip`, organization **BigWiffWiffleBallLeague** (Pro
+  plan), region **us-east-2**, created **13 Oct 2026**, status ACTIVE.
+  Found by a read-only dashboard check on 2026-11-11; its tables/schema
+  have NOT been inspected, so it is unknown whether it is empty, holds
+  prototype data, or holds anything else. The overnight audit's "no
+  backend project exists" claim was wrong — the repo has no backend, but
+  the project exists in Supabase. No migrations have been applied to it.
+- **Decision needed:** Confirm TheProgramOS is the intended backend for
+  THE PROGRAM OS, and approve inspecting its current schema, then using
+  it (or a separate scratch project under the same account) as the
+  scratch/dev target for migrations 001 + 002.
 - **Blocked until decided:** applying migrations anywhere; building the
   API layer; any UI integration with live data.
 

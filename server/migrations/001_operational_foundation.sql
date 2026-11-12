@@ -2,9 +2,9 @@
 -- Migration 001: operational data model (PostgreSQL / Supabase-compatible)
 --
 -- STATUS: version-controlled migration ONLY. Not applied to any database.
--- No Supabase/Postgres project for THE PROGRAM exists yet (the prototype
--- is static HTML + localStorage); applying this requires an owner-approved
--- backend decision — see docs/MORNING_DECISIONS.md.
+-- A Supabase project named TheProgramOS exists (ref rkgdwqgmldznczikrjip,
+-- found 2026-11-11) but its schema is uninspected; applying this requires
+-- an owner-approved backend decision — see docs/MORNING_DECISIONS.md.
 --
 -- Design notes
 -- * Cohort enrollment cap (cohorts.enrollment_cap) and session reservation
