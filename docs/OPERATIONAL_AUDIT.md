@@ -180,7 +180,8 @@ by design ("source decisions remain visible/auditable").
   interleaved. The overnight approach (additive backend modules, no
   rewrite) is the correct one; a rewrite would risk the coaching logic.
 - **Migrations are unvalidated against PostgreSQL** (no `psql` in this
-  environment and no project exists). They are version-controlled and
+  environment; a project DOES exist — TheProgramOS, inspected empty
+  2026-11-12, see MORNING_DECISIONS #2). They are version-controlled and
   reviewed, but must be applied to a scratch database and exercised
   before any real use. (docs/MORNING_DECISIONS.md #3.)
 

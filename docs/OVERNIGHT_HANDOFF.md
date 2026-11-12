@@ -134,7 +134,8 @@ Command: `node --test server/tests/*.test.js assessment-engine/assessment-engine
   no backend/billing code in UI files.
 
 **Untested:** the migrations against real PostgreSQL (no `psql`/server
-in this environment and no project exists — see MORNING_DECISIONS #3);
+in this environment; a project DOES exist — TheProgramOS, inspected
+empty 2026-11-12, see MORNING_DECISIONS #3);
 the engine against a live Postgres via `reserve_seat()` (same reason);
 any browser/rendered-UI check beyond the hash/presence tests (no UI
 changes were made, so there is nothing rendered to re-verify); real-device

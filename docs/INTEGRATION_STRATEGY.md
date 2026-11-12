@@ -12,14 +12,19 @@ authorises a deployment, a database, or a payment integration.
 - The two do **not** talk to each other yet, by design: the UI was not
   touched overnight, and no live backend exists to talk to.
 
-## 2. Recommended backend: Supabase / PostgreSQL
+## 2. Backend: Supabase / PostgreSQL — DECIDED 2026-11-12 (FINAL)
 
 Why: the data model is relational (reservations, waitlists, attendance,
 assessments with history), the concurrency guarantee needs real
 transactions, and the prototype's owner already operates Supabase for
 Big Whiff — the same operational pattern (RLS, dashboard SQL, no local
-prod data) applies. **This is a recommendation, not a decision.**
-No project exists; creating one needs owner approval (MORNING_DECISIONS #2).
+prod data) applies. **Decided by Marcus 2026-11-12: Supabase is the
+SOLE backend; the dual-database directive is cancelled and the Neon
+TheProgramOS project is unused (preserve without modification).**
+The target project is TheProgramOS itself (ref `rkgdwqgmldznczikrjip`,
+inspected read-only 2026-11-12: EMPTY, 0 tables in public, 0 auth
+users) — see MORNING_DECISIONS #2. Applying migrations to it still
+needs Marcus's explicit approval.
 
 Alternatives considered: (a) SQLite file on a single host — fine for local
 dev (and what `SqliteStore` is for), not for multi-coach/multi-device use;
@@ -31,16 +36,22 @@ solely on browser-side checks, and minors' data must not live in
 
 ## 3. Integration sequence (each step separately reviewable)
 
-1. **Scratch backend.** Owner approves a Supabase project (or another
-   Postgres). Apply `migrations/001` + `002` to the scratch project only.
-   Run the migration against an empty database; verify `reserve_seat()`
-   with two concurrent calls (the same test the SQLite suite runs).
-2. **API layer (new, small).** A thin authenticated service exposing the
-   engine: `reserve`, `cancel`, `availableSeats`, `recordAttendance`,
-   `reconcileAttendance`, `capacityFor`. The engine is transport-agnostic;
-   the API adds auth + role checks + RLS. Complete the role-scoped RLS
-   policies (migration 001 enables RLS; policies are the starting point,
-   not the finished set).
+1. **Dev target: TheProgramOS itself.** The Supabase project
+   TheProgramOS (ref `rkgdwqgmldznczikrjip`) is the dev/scratch target
+   — no separate scratch project. Once Marcus approves, apply
+   `migrations/001` + `002` + `003` to it (in order) via the dashboard
+   SQL editor; the project was inspected empty 2026-11-12, so there is
+   nothing to collide with. Run the concurrency checks against
+   `reserve_seat()` with two concurrent calls (the same test the SQLite
+   suite runs) and the RLS policy checks in docs/SUPABASE_HANDOFF.md.
+2. **API layer (BUILT 2026-11-12, not yet run against live Supabase).**
+   `server/postgres-store.js` (PostgresStore on a `pg` Pool) +
+   `server/api.js` (thin authenticated service exposing `reserve`,
+   `cancel`, `availableSeats`, `recordAttendance`,
+   `reconcileAttendance`, `capacityFor`, `promoteWaitlist`). The engine
+   is transport-agnostic; the API adds auth-context role checks +
+   actor = auth UID, with the role-scoped RLS policies of migration
+   003 as the backstop. No UI integration yet.
 3. **Data rehearsal.** Map the prototype's generated state to the new
    schema in a script, run it against scratch, and verify counts. **Do
    not import demo athletes as real records** — they are fictional; the
@@ -52,13 +63,16 @@ solely on browser-side checks, and minors' data must not live in
    first (the pattern the assessment INTEGRATION.md already recommends
    for assessments). Director capacity view second. No redesign of any
    existing view.
-5. **Session planning link.** When a session is scheduled, its
-   `capacityInput` (template, coaches, location, equipment, cohort cap)
-   is computed by `session-capacity.js` and stored on the session row;
-   the human-approved draft (`draftSession` + Director approval) remains
-   the only way session *content* is set. If a draft's expected attendance
-   exceeds the computed cap, the session is flagged infeasible — capacity
-   is never auto-raised to fit demand.
+5. **Session planning link (BUILT 2026-11-12).** `server/schedule-session.js`
+   (`scheduleSession()`) takes a human-approved draft, runs
+   `computeSessionCapacity()`, and returns the `training_sessions` row
+   payload (`capacity_effective`, `capacity_inputs`, `plan_id`,
+   `plan_approved_by`) plus `{ feasible, flaggedInfeasible }`. The
+   human-approved draft (`draftSession` + Director approval) remains
+   the only way session *content* is set. If a draft's expected
+   attendance exceeds the computed cap, the session is flagged
+   infeasible — capacity is never auto-raised to fit demand. No DB
+   write happens in this function; the API/scheduling step owns writes.
 6. **Assessments.** `assessment-store.js` becomes the repository behind
    the coach assessment overlay described in INTEGRATION.md (steps 4–7).
    Smart Draft evidence stays behind a feature flag, human-reviewed.
@@ -86,4 +100,5 @@ node server/fixtures/generate-75-scenario.js   # regenerates scenario-75-athlete
 
 `MemoryStore` for unit tests; `SqliteStore(':memory:')` (or a file path)
 for a persistent local stand-in. Both implement the same interface the
-PostgreSQL layer will serve.
+PostgreSQL layer serves (`server/postgres-store.js`, built 2026-11-12;
+tested against an injected fake Pool — no live Supabase needed).

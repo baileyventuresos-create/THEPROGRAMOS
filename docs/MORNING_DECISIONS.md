@@ -17,8 +17,18 @@ continued around every item; nothing is stalled except the item itself.
   to this repo; any future UI integration work that touches real records.
 - **Overnight action:** visibility NOT changed; recorded here only.
 
-## 2. Backend choice: a Supabase project EXISTS — confirm it is the intended one
+## 2. Backend choice: DECIDED — Supabase is the SOLE backend (2026-11-12, FINAL)
 
+- **Decision (2026-11-12, FINAL, by Marcus):** Supabase is the sole
+  backend for The Program OS. The dual-database directive is CANCELLED.
+  The Neon project TheProgramOS (winter-poetry-05133966) is UNUSED —
+  preserve it without modification; do not connect the application to
+  it. The backend-completion mission (2026-11-12) built the Postgres
+  store (`server/postgres-store.js`, `pg`), the thin authenticated API
+  (`server/api.js`), migration 003 (auth link + RLS), and the
+  session-scheduling link (`server/schedule-session.js`) against
+  Supabase only. Nothing in this mission applied anything to any
+  database or touched any Neon project.
 - **Context (corrected 2026-11-11, inspected 2026-11-12):** A Supabase
   project named **TheProgramOS** DOES exist — ref
   `rkgdwqgmldznczikrjip`, organization **BigWiffWiffleBallLeague** (Pro
@@ -31,19 +41,22 @@ continued around every item; nothing is stalled except the item itself.
   prototype data — nothing for migrations 001 + 002 to collide with
   (all `CREATE TABLE IF NOT EXISTS`, standard SQL, no Postgres 16+
   features). No migrations have been applied to it.
-- **Decision needed:** Approve applying migrations 001 + 002 to
-  TheProgramOS as the dev/scratch target, or direct a separate scratch
-  project instead. Production use of this project is a separate decision.
-- **Blocked until decided:** applying migrations anywhere; building the
-  API layer; any UI integration with live data.
+- **Decision still needed:** Approve applying migrations 001 + 002 + 003
+  to TheProgramOS as the dev target. Production use of this project is
+  a separate decision.
+- **Blocked until decided:** applying migrations anywhere; any UI
+  integration with live data. (Building the API layer is DONE — see
+  above; it runs against injected stores in tests and has never touched
+  live Supabase.)
 
 ## 3. Migrations are unvalidated against real PostgreSQL
 
 - **Context:** No `psql` or Postgres server was available in the overnight
-  environment, and no project exists. The migrations were written and
-  reviewed, and their key invariants are asserted in tests (row lock,
-  unique index, RLS enabled, price default), but the SQL has not been
-  executed against PostgreSQL.
+  environment. A project DOES exist (TheProgramOS, inspected empty
+  2026-11-12 — see #2). The migrations were written and reviewed, and
+  their key invariants are asserted in tests (row lock, unique index,
+  RLS enabled, price default, citext extension, infeasible-session
+  guard), but the SQL has not been executed against PostgreSQL.
 - **Decision needed:** None — this is a sequencing note, not an approval
   ask. Once #2 is approved, apply to scratch and run the concurrency
   checks before any real use.
