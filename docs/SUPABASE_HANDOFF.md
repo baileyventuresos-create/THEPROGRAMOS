@@ -173,21 +173,54 @@ queries run in the editor:
   visually confirmed in the editor). The repo file was already correct;
   no file change was needed.
 
+## Live verification against TheProgramOS (2026-11-12)
+
+Run against the live project (Postgres 15.8.1.50) via the dashboard
+SQL editor, same signed-in session as the apply. Test data used fixed
+UUIDs and `TST` codes / `test-programos.test` emails only, and was
+removed afterwards (see check C). Results:
+- **Check A — `reserve_seat()` gate:** cap-1 session: athlete A
+  `confirmed`; B `waitlisted` position 1; A re-book → `duplicate`
+  error, no phantom entry; C `waitlisted` position 2; cap-0 session →
+  `session_not_bookable` error. Cancel A's seat (1 row) freed it: D
+  `confirmed`. B re-book after the cancel → `already_waitlisted`
+  position 1 (reserve_seat does NOT auto-promote — promotion is
+  engine-side, via `promoteWaitlist`). Final state: 1 confirmed, 2
+  waiting. Audit rows from `reserve_seat()` alone: 2 `RESERVED`, 2
+  `WAITLISTED` — one `RESERVED` per confirmation.
+- **Check B — RLS scoping (JWT-claim impersonation via `SET LOCAL`
+  inside a transaction, not a real login flow):** parent sees only
+  athletes A+B, their 2 memberships, 1 reservation (A's cancelled
+  row), 1 waitlist entry (B). Coach (heads cohort TST-A) sees only
+  athletes A+B, 0 memberships (the minimum policy set gives coaches
+  no membership access — by design), 2 reservations and 2 waitlist
+  entries on session S1. Anon sees 0 everywhere. All as expected.
+- **Check C — cleanup:** all test rows removed; final counts 22
+  tables, 58 policies, 10 assessment definitions, 0 athletes, 0
+  app users, 0 auth users, 0 reservations, 0 audit events, 0 locations.
+- **Honest limits on what "live" means here:** the check-A calls ran
+  sequentially in one editor session, not as two simultaneous
+  connections — the true cross-connection race was proven on local
+  Postgres 18.6 with the identical function (exactly 1 confirmed + 1
+  waitlisted), and the gate's serialisation is the `FOR UPDATE` row
+  lock, but a live two-connection race has not been run. The RLS
+  checks impersonated JWT claims; no real Supabase Auth login/JWT
+  flow was exercised. No test director user was created, so the
+  director policy path was not exercised live.
+
 ## Still unverified — do not claim otherwise
 
-- Migrations 001 + 002 + 003 ARE applied to TheProgramOS (see above).
-  Structural counts are verified, but the live behaviour checks have
-  NOT run yet. Before any real athlete record is stored, repeat the
-  checks against TheProgramOS:
-  1. Two concurrent `reserve_seat()` calls for one seat: exactly one
-     confirms (same test the SQLite suite runs).
-  2. `reserve_seat()` on a cap-0 session raises `session_not_bookable`.
-  3. As an `authenticated` parent user: can read own athletes, cannot
-     read other athletes; as a coach: can read only their cohorts'
-     athletes; as `anon`: nothing.
-  4. Confirm the double-`RESERVED` audit rows (one from
-     `reserve_seat()`, one from the engine) are acceptable, or reconcile
-     by action + reservation id.
+- The live behaviour checks above HAVE run (see previous section).
+  Remaining before any real athlete record is stored:
+  1. Decide the double-`RESERVED` audit rows: live, `reserve_seat()`
+     writes one `RESERVED` row per confirmation. The engine writes a
+     second one when the API is wired — accept the duplicate rows, or
+     reconcile by action + reservation id.
+  2. Live two-connection race for one seat (sequential gate logic is
+     proven live; simultaneous connections were proven locally only).
+  3. Director policy path live (no test director user was created).
+  4. Real Supabase Auth login/JWT flow (RLS was exercised via
+     impersonated claims, not a real login).
 - No live Supabase connection has been made from this code (no
   credentials exist in the repo); `PostgresStore` against real Supabase
   is untested. The API has no transport yet (no Edge Function / server
@@ -200,10 +233,13 @@ queries run in the editor:
 ## What needs Marcus
 
 1. DONE 2026-11-12: migrations 001 + 002 + 003 applied to TheProgramOS
-   as the dev target (verified above). Next: repeat the live
-   verification checks (concurrency, cap-0, RLS scoping) against
-   TheProgramOS — step 3 of the deployment sequence.
+   as the dev target (verified above), and the live verification checks
+   ran (concurrency gate, cap-0, RLS scoping — see "Live verification"
+   above). Next: API transport decision.
 2. Confirm the RLS policy set is acceptable before any real athlete
-   record is stored (see verification list above).
+   record is stored — live evidence now exists (parent/coach/anon
+   scoping passed; see limits in "Live verification"). Also decide the
+   double-`RESERVED` audit rows (one per confirmation from
+   `reserve_seat()` alone; the engine adds a second when wired).
 3. Decide the API transport (Supabase Edge Function / server route)
    and how the JWT-derived auth context is supplied — not built here.

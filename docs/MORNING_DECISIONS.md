@@ -65,13 +65,16 @@ continued around every item; nothing is stalled except the item itself.
   guard). The SQL was executed against a throwaway local Postgres 18.6
   (2026-11-12, all checks passed) and applied to TheProgramOS itself
   (Postgres 15.8.1.50) on 2026-11-12 with structural verification
-  (22 tables, 58 policies, 10 definitions). Live concurrency + RLS
-  checks against TheProgramOS are still to be run before any real use.
+  (22 tables, 58 policies, 10 definitions). The live behaviour checks
+  then ran against TheProgramOS on 2026-11-12 and passed (gate logic,
+  cap-0, parent/coach/anon RLS scoping; see docs/SUPABASE_HANDOFF.md
+  "Live verification"). Still open: a live two-connection race, the
+  director path, and a real-login JWT flow.
 - **Decision needed:** None — this is a sequencing note, not an approval
-  ask. Run the live checks (docs/SUPABASE_HANDOFF.md) before any real use.
+  ask. The remaining live checks (above) run before any real use.
 - **Blocked until decided:** any claim that the migrations are proven
-  against live Supabase behaviour — structural counts are verified, but
-  the live concurrency and RLS checks have not run yet.
+  against live Supabase behaviour beyond what the 2026-11-12 live
+  verification actually covered (see its honest limits).
 
 ## 4. Membership price: $149 fixed vs the prototype's "$149 / $179"
 
