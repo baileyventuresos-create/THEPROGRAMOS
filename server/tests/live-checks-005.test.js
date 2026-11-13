@@ -82,7 +82,10 @@ test('005 behavioral re-check script is safe and its summary is last', () => {
   }
   // The summary SELECT must be the last statement, so the dashboard
   // (which shows only the last result set) displays the verdicts.
-  const lastStatement = behavioral.trim().split(';').map((s) => s.trim()).filter(Boolean).pop();
+  // Strip full-line comments first: the comment above the SELECT is
+  // part of its chunk after splitting on ';'.
+  const codeOnly = behavioral.split('\n').filter((line) => !line.trim().startsWith('--')).join('\n');
+  const lastStatement = codeOnly.trim().split(';').map((s) => s.trim()).filter(Boolean).pop();
   assert.ok(lastStatement.startsWith('SELECT check_id, status, detail FROM _tst005b_results'),
     `last statement must be the summary SELECT, found: ${lastStatement.slice(0, 80)}`);
   const drops = behavioral.match(/DROP\s+TABLE[^;]*;/gi) || [];
