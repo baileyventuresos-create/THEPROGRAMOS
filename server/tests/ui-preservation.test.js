@@ -4,8 +4,12 @@
  *
  * 1. SHA-256 snapshot: the six shipped UI/source files must be byte-identical
  *    to tests/ui-preservation.snapshot.json (recorded 2026-11-11 from main
- *    commit dc5d42d). Any edit — intentional or accidental — fails loudly
- *    and must be reviewed, never silently absorbed.
+ *    commit dc5d42d; the assessment-engine.js hash was updated 2026-11-12
+ *    in a reviewed commit when the engine was intentionally extended to
+ *    v1.1.0 — new GAA definitions only, no existing definition changed.
+ *    The HTML files remain byte-identical to dc5d42d.) Any edit —
+ *    intentional or accidental — fails loudly and must be reviewed,
+ *    never silently absorbed.
  * 2. Structural presence: the modes and surfaces the owner listed as
  *    must-preserve still exist in the prototype source.
  * 3. No backend/billing code leaked into the UI files: reservations and
