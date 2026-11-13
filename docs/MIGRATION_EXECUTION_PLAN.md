@@ -1,6 +1,10 @@
 # Migration Execution Plan — 004 (assessment + reassessment)
 
-Status: PLAN ONLY. Nothing in this document has been applied.
+Status: APPLIED 2026-11-13 (see §4 verification below) via the
+dashboard SQL editor, GitHub sign-in as `baileyventuresos-create`.
+Pre-checks matched (22 / 58 / 10 / 0); post-apply verification matched
+(26 tables / 15 definitions / 72 policies / 0 new rows). The plan's
+§5 functional checks were NOT run — separate approval required.
 Applying migration 004 to Supabase project TheProgramOS is a
 separate owner decision (`docs/MORNING_DECISIONS.md` §11).
 

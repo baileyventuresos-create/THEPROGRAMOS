@@ -265,3 +265,22 @@ athlete system; age is an athlete attribute, not a division.
 - **Owner decision:** see `docs/MORNING_DECISIONS.md` §15 — approve
   applying 005 to TheProgramOS (after 004). Not merge, deploy,
   production use, or billing.
+
+## Addendum — 2026-11-13: migration 004 applied and verified
+
+- **Approved:** Marcus, 2026-11-13 ("Yes — apply 004 + Edge Function").
+- **Applied:** dashboard SQL editor, GitHub sign-in as
+  `baileyventuresos-create`; 004 pasted verbatim, single transaction,
+  "Success. No rows returned."
+- **Pre-checks (§2):** 22 public tables / 10 definitions / 58 policies /
+  0 rows; no 004 tables present; 003 helpers present. All matched.
+- **Verification (§4):** 26 tables / 15 definitions (movement-assessment
+  kind='observation', direction NULL, aggregation='none') / 72 policies /
+  RLS on all four new tables / `uq_asess_idempotency` present /
+  `development_plans` CHECK carries the override fix / 0 new rows.
+  All matched.
+- **Not run:** plan §5 live functional checks (they write synthetic
+  test rows; separate approval required, with cleanup).
+- **Still open:** migration 005 (decision §15) — apply after 004;
+  Edge Function deploy (scaffold only, prerequisites now 004 applied
+  + 005 pending).

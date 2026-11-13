@@ -175,14 +175,18 @@ continued around every item; nothing is stalled except the item itself.
 - **Blocked until decided:** any live use of the GAA battery,
   reassessment schedules, deferrals, or plan gating; API methods for
   assessments; any UI integration with live assessment data.
-- **Status 2026-11-13 — APPROVED, NOT YET APPLIED:** Marcus approved
+- **Status 2026-11-13 — APPLIED AND VERIFIED:** Marcus approved
   applying 004 (with the Edge Function decision) on 2026-11-13.
-  Application has NOT been performed: it requires the dashboard
-  SQL-editor browser route (the Supabase Management API token is
-  dead), and that step is still pending. Pre-checks (22 tables /
-  58 policies / 10 definitions / 0 rows) have NOT been run against
-  live. Do not mark 004 as applied until the execution plan's §4
-  verification counts (26 / 15 / 72 / 0) are recorded.
+  Applied the same day via the dashboard SQL editor (GitHub sign-in
+  as `baileyventuresos-create`; the file was pasted verbatim, single
+  transaction, "Success. No rows returned."). Pre-checks matched
+  exactly (22 tables / 58 policies / 10 definitions / 0 rows; no 004
+  tables present; 003 helpers present). Post-apply verification
+  matched exactly (26 tables / 15 definitions / 72 policies / 0 new
+  rows; RLS on all four new tables; `uq_asess_idempotency` present;
+  the `development_plans` CHECK carries the override fix). No test
+  data added, no other changes. The plan's §5 live functional checks
+  were NOT run — they write test rows and need separate approval.
 
 ## 12. Merge and deployment — universal-assessment branch
 
