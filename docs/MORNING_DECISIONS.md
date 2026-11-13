@@ -198,3 +198,34 @@ continued around every item; nothing is stalled except the item itself.
 - **Action proposed:** delete the branch after this work merges, to avoid
   confusion. No approval required to note it; deletion itself can wait
   for the merge decision.
+
+## 13. API transport for the assessment workflow (new, from integration)
+
+- **Context:** The assessment workflow (`server/assessment-workflow.js`)
+  and its authenticated API (`server/assessment-api.js`) are
+  transport-agnostic, exactly like the reservation API: they take an
+  injected auth context derived from a verified Supabase Auth JWT and
+  never parse tokens themselves. Nothing in this branch hosts them.
+  The two candidate hosts are a Supabase Edge Function or a server
+  route on the application's host (when one exists — there is
+  currently no deployment pipeline for this repo at all).
+- **Decision needed:** Edge Function or server route (or another host
+  Marcus prefers), and who wires the JWT verification.
+- **Blocked until decided:** any live use of the assessment API;
+  UI integration with live assessment data.
+
+## 14. Prototype Assessments view copy is stale (new, from integration)
+
+- **Context:** `THE PROGRAM OS.html` `vAssess()` still describes the
+  assessment battery as an unapproved proposal ("nothing here is
+  approved, and these numbers are not being collected today") with a
+  "~12 weeks" retest interval listed as an ASSUMPTION. The engine
+  now implements the standardized GAA battery on a 28-day cycle.
+  The HTML was deliberately NOT edited during integration (UI
+  preservation); the dashboard "due for re-testing" card also still
+  reads prototype demo data instead of the reassessment engine.
+- **Decision needed:** Approve refreshing the Assessments view copy
+  (and wiring the dashboard due-card to `coachDashboard()`) as a
+  minimal, additive UI update — no redesign, no layout change.
+- **Blocked until decided:** any HTML change to the Assessments view
+  or dashboard card.
