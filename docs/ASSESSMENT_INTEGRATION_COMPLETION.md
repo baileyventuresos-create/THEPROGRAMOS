@@ -54,9 +54,14 @@ or applied to any live system.
 
 ## 3. Branch and PR status
 
-- **Branch:** `feature/universal-assessment-reassessment-v1`, head
-  (see §6 of `docs/ASSESSMENT_REASSESSMENT_HANDOFF.md` for the
-  base commits; this mission adds the commits listed below).
+- **Branch:** `feature/universal-assessment-reassessment-v1`, from
+  the foundation branch @ `e4da6cc`. This mission's commits:
+  - `efe7422` — workflow implementation (004 fixes, drafts, access,
+    workflow service + API, end-to-end tests, youth fixture)
+  - `caa5e1e` — docs (integration audit, migration execution plan,
+    completion report, decisions §§13–14)
+  - this record commit (head; see `git log` on the branch, which is
+    authoritative).
 - **PR #3:** draft, OPEN, not merged, state MERGEABLE; base is
   `feature/program-operational-foundation-v1` (itself unmerged,
   head `e4da6cc`). No second PR was opened — this work completes
