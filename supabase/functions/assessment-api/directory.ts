@@ -34,8 +34,10 @@
 // migration 001, so an adult athlete (e.g. the 48-year-old validation
 // case) cannot be stored as an athletes row today. The directory
 // therefore reports age_years as-is; supporting adult athletes in
-// the live database needs a small additive migration relaxing that
-// CHECK (a 005 candidate). See README.md §4. This is a gap to decide,
+// the live database needs migration 005
+// (server/migrations/005_unified_athlete_age_and_result_flags.sql,
+// written 2026-11-13, NOT applied), which removes the 19 maximum
+// (floor of 5 kept). See README.md §4. This is a gap to decide,
 // not something this scaffold silently works around.
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";

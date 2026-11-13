@@ -29,9 +29,11 @@
 // store.js) and reads them back in athleteAssessmentView. This
 // adapter maps them to `modified` / `capped` columns, which DO NOT
 // EXIST yet — inserts/selects touching assessment_results will fail
-// at PostgREST until a small additive migration (a 005 candidate)
-// adds those two BOOLEAN columns. The mapping is written so it works
-// unchanged once the columns exist; nothing is silently dropped.
+// at PostgREST until migration 005
+// (server/migrations/005_unified_athlete_age_and_result_flags.sql,
+// written 2026-11-13, NOT applied) adds those two BOOLEAN columns.
+// The mapping is written so it works unchanged once the columns
+// exist; nothing is silently dropped.
 // Do NOT "fix" this by stuffing the flags into the attempts JSONB —
 // attempts must stay the preserved numeric attempts.
 

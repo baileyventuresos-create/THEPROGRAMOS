@@ -72,23 +72,27 @@ node build.mjs          # writes vendor/workflow.bundle.mjs (generated, not comm
    fails loudly (`WORKFLOW_BUNDLE_MISSING`) until `build.mjs` has
    run. The bundle must be generated and smoke-tested (see §5)
    before any deploy.
-2. **`modified` / `capped` flags have no Postgres columns.**
+2. **`modified` / `capped` flags have no Postgres columns — until
+   migration 005 is applied.**
    `server/assessment-store.js` records `modified` and `capped` on
    every assessment result, and `athleteAssessmentView` reads them
    back — but migration 002's `assessment_results` has neither
    column. `store.ts` maps them to `modified` / `capped` columns so
-   the adapter works unchanged once they exist, but until a small
-   additive migration (a 005 candidate) adds those two BOOLEAN
-   columns, any insert/select touching `assessment_results` fails at
+   the adapter works unchanged once they exist, but until migration
+   005 (`server/migrations/005_unified_athlete_age_and_result_flags.sql`,
+   written 2026-11-13, NOT applied) adds those two BOOLEAN columns,
+   any insert/select touching `assessment_results` fails at
    PostgREST. Do not "fix" this by stuffing the flags into the
    `attempts` JSONB — attempts must stay the preserved numeric
    attempts.
-3. **Adult athletes cannot be stored yet.** `athletes.age_years`
+3. **Adult athletes cannot be stored yet — until migration 005 is
+   applied.** `athletes.age_years`
    is `CHECK (age_years BETWEEN 5 AND 19)` in migration 001, so an
    adult athlete (e.g. the 48-year-old validation case) cannot be
-   an `athletes` row today. Supporting adults in the live database
-   needs a small additive migration relaxing that CHECK (also a 005
-   candidate). The directory reports `age_years` as-is; nothing
+   an `athletes` row today. Migration 005 removes the 19 maximum
+   (floor of 5 kept as a data-sanity guard) under the unified
+   athlete system — one system for all ages, no divisions. The
+   directory reports `age_years` as-is; nothing
    here works around the CHECK.
 4. **IDs are UUIDs in Postgres, not Node `uid()` strings.** The
    Node stores generate ids like `asess_…`; Postgres id columns are
@@ -96,11 +100,13 @@ node build.mjs          # writes vendor/workflow.bundle.mjs (generated, not comm
    row in place before inserting, so the caller's references stay
    consistent. No behaviour change — the workflow never exposes
    the id format to callers.
-5. **Migration 004 must be applied first.** The function reads and
+5. **Migrations 004 and 005 must be applied first.** The function reads and
    writes `assessment_schedules`, `assessment_deferrals`,
    `assessment_drafts`, `development_plans`, and the
-   `idempotency_key` column, all of which 004 creates. Do not
-   deploy before 004 is applied and verified (see
+   `idempotency_key` column, all of which 004 creates — and the
+   `modified` / `capped` result columns and the relaxed athlete age
+   CHECK, which 005 provides. Do not
+   deploy before 004 and 005 are applied and verified (see
    `docs/MIGRATION_EXECUTION_PLAN.md`).
 
 ## 5. Verification status (2026-11-13)

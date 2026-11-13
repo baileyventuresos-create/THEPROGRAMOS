@@ -256,3 +256,38 @@ continued around every item; nothing is stalled except the item itself.
   minimal, additive UI update — no redesign, no layout change.
 - **Blocked until decided:** any HTML change to the Assessments view
   or dashboard card.
+
+## 15. Unified athlete system — migration 005 (new, Marcus correction 2026-11-13)
+
+- **Context:** Marcus corrected the previous direction: The Program OS
+  serves athletes of all ages under ONE unified athlete system. Age
+  is an athlete attribute, not a division. There are no youth/adult
+  divisions, no new membership categories, and no pricing change.
+  Audit (2026-11-13, full-repo grep): the 19-year-old maximum lived
+  in exactly ONE enforcement point — `athletes.age_years CHECK
+  (age_years BETWEEN 5 AND 19)` in migration 001. No code file
+  enforces an age maximum; no test asserted one. Kept deliberately:
+  per-cohort age bands (cohort eligibility, not divisions), the
+  under-18 youth-growth caveat in progress calculation, youth/adult
+  protocol alternatives in the GAA battery, and parent-books-for-minor.
+- **What was built (branch, unapplied):** migration 005
+  (`server/migrations/005_unified_athlete_age_and_result_flags.sql`,
+  Postgres 15 compatible, additive only) does exactly two things:
+  (1) removes the 19 maximum — re-issues the CHECK as
+  `age_years >= 5` (floor kept as a data-sanity guard; it is the
+  original minimum and the youngest cohort starts at 8); the old
+  CHECK is dropped by definition match, so re-runs are safe;
+  (2) adds `modified` / `capped` BOOLEAN NOT NULL DEFAULT FALSE to
+  `assessment_results` — columns the store and the Edge Function
+  scaffold already expect. No new tables, no policy changes, no
+  seed data, no pricing/division/category changes. The Edge Function
+  scaffold's README and gap comments now point at 005, and its
+  deploy prerequisites are 004 + 005.
+- **Decision needed:** Approve applying migration 005 to
+  TheProgramOS (after 004, which is being applied separately in
+  the browser task; 005 does not depend on 004). Application only —
+  not merge, deploy, production use, or billing.
+- **Blocked until decided:** storing any adult athlete as an
+  `athletes` row; any Edge Function insert/select on
+  `assessment_results` (the `modified` / `capped` columns do not
+  exist until 005 is applied).

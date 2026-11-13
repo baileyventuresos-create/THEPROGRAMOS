@@ -227,3 +227,41 @@ code — they are labelled as such wherever they appear.
 - Release sequence steps 1 and 4 from §7 are now: (1) apply 004
   (approved — browser step pending); (4) transport decided (Edge
   Function — scaffold done, deploy is a separate approval).
+
+## Addendum 2026-11-13 — Migration 005: unified athlete system (Marcus correction)
+
+Marcus corrected the previous direction: no youth/adult divisions.
+The Program OS serves athletes of all ages under one unified
+athlete system; age is an athlete attribute, not a division.
+
+- **Audit:** full-repo grep found the 19-year-old maximum in exactly
+  one enforcement point — `athletes.age_years CHECK (age_years
+  BETWEEN 5 AND 19)` in migration 001. No code file enforces an age
+  maximum; no test asserted one. Kept: per-cohort age bands
+  (eligibility, not divisions), the under-18 youth-growth caveat,
+  youth/adult GAA protocol alternatives, parent-books-for-minor.
+  (The drill library's "8–18" per-game suitability labels are
+  descriptive content, not enforcement, and were left untouched.)
+- **Migration 005** (`server/migrations/005_unified_athlete_age_and_result_flags.sql`,
+  Postgres 15 compatible, additive only, NOT applied): (1) removes
+  the 19 maximum — CHECK re-issued as `age_years >= 5` (floor kept
+  as a data-sanity guard); old CHECK dropped by definition match,
+  re-runs safe; (2) adds `modified` / `capped` BOOLEAN NOT NULL
+  DEFAULT FALSE to `assessment_results`. No new tables, no policy
+  changes, no seed data. 005 does not depend on 004 and applies in
+  order after it.
+- **Code:** no workflow changes were needed — the existing paths
+  already accept any age; the only blockers were the database CHECK
+  and the missing columns. The Edge Function scaffold's gap comments
+  and README §4 now point at 005, and its deploy prerequisites are
+  004 + 005.
+- **Tests:** 12 new tests in `server/tests/unified-athlete-005.test.js`
+  (005 SQL invariants; adult athletes aged 19, 20, 48, 65 through
+  the full workflow on the same paths as youth; youth 12 unchanged
+  with the under-18 caveat kept; modified/capped flag round-trip;
+  cohort age bands preserved — a 48-year-old is still ineligible
+  for a 9–11 cohort; protocol alternatives still served per band).
+  Full suite result recorded with the commit below.
+- **Owner decision:** see `docs/MORNING_DECISIONS.md` §15 — approve
+  applying 005 to TheProgramOS (after 004). Not merge, deploy,
+  production use, or billing.
