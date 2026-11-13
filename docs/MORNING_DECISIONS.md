@@ -295,6 +295,20 @@ continued around every item; nothing is stalled except the item itself.
   TheProgramOS (after 004, which is being applied separately in
   the browser task; 005 does not depend on 004). Application only —
   not merge, deploy, production use, or billing.
+- **Status 2026-11-13 — APPLIED AND VERIFIED:** Marcus approved
+  applying 005 the same day. Applied via the dashboard SQL editor
+  (GitHub sign-in as `baileyventuresos-create`). Pre-check passed
+  (26/15/72/0, old CHECK present, new columns absent). Post-apply
+  verification: 26 tables / 15 definitions / 72 policies / 0 rows;
+  `modified`/`capped` BOOLEAN NOT NULL DEFAULT FALSE;
+  age CHECK now `age_years >= 5` with no upper bound and no division
+  column; all 25 assessment policies present by name; behavioral
+  re-check 6/6 PASS (adult 48 + youth 12 in one table, age 5
+  inserts, age 4 rejected, flags round-trip, defaults FALSE);
+  cleanup PASS, no test data remains. Full record in
+  `server/live-checks/005/RESULTS.md` (branch head 8f0cd41).
+  Edge Function deploy prerequisites (004 + 005) are now both met
+  at the schema level; deploy still needs separate approval.
 - **Blocked until decided:** storing any adult athlete as an
   `athletes` row; any Edge Function insert/select on
   `assessment_results` (the `modified` / `capped` columns do not
