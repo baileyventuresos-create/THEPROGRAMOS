@@ -129,7 +129,11 @@ continued around every item; nothing is stalled except the item itself.
   adapter, but the battery itself is NEEDS VALIDATION in the prototype
   (hand-timed sprints, no agreed reaction test, vertical jump method
   undecided). Nothing here represents any assessment as clinically or
-  scientifically validated.
+  scientifically validated. Update 2026-11-12: the universal GAA v1
+  protocol (`server/assessment-battery.js`, protocol `gaa-v1`) is now
+  written with standardized instructions, safety, and validity
+  criteria — but it is still unvalidated in the field and this
+  decision is unchanged.
 - **Decision needed:** Approve the battery/protocols/timing method and
   retest interval before assessment results are shown to parents as
   anything more than coach-recorded measurements; approve the athlete
@@ -145,6 +149,46 @@ continued around every item; nothing is stalled except the item itself.
 - **Decision needed:** Review and approve the merge into `main`; any
   deployment is a separate decision after that (there is currently no
   deployment pipeline for this repo at all).
+- **Blocked until decided:** merge; any deployment.
+
+## 11. Apply migration 004 (assessment + reassessment) to TheProgramOS
+
+- **Context:** Migration `server/migrations/004_assessment_reassessment.sql`
+  was written and reviewed 2026-11-12 on branch
+  `feature/universal-assessment-reassessment-v1`. It is ADDITIVE:
+  5 GAA assessment definitions (incl. observation-only movement
+  assessment), `assessment_schedules`, `assessment_deferrals`,
+  `development_plans` (CHECK: a finalized plan must name its baseline
+  session), `assessment_sessions.idempotency_key` + partial unique
+  index, and RLS policies mirroring 003. It does not alter or delete
+  any existing table except two additive changes to
+  `assessment_definitions` (a `kind` column + relaxed direction/
+  aggregation CHECKs) and one nullable column on
+  `assessment_sessions`. It has NOT been applied anywhere and has NOT
+  run against any Postgres in this session (SQL-invariant tests only).
+  The target project is EMPTY of real athlete data (verified
+  2026-11-12: 0 tables in public before 001–003, 0 auth users).
+- **Decision needed:** Approve applying 004 to TheProgramOS (directly,
+  or to a scratch copy first), and whether to run the live
+  verification checks after (tables/definitions/policies counts,
+  idempotency + concurrency checks, RLS scoping).
+- **Blocked until decided:** any live use of the GAA battery,
+  reassessment schedules, deferrals, or plan gating; API methods for
+  assessments; any UI integration with live assessment data.
+
+## 12. Merge and deployment — universal-assessment branch
+
+- **Context:** Branch `feature/universal-assessment-reassessment-v1`
+  is pushed and a draft PR is opened (see
+  `docs/ASSESSMENT_REASSESSMENT_HANDOFF.md` §6). It touches no HTML
+  files and no production system, but it is **not merged**. It extends
+  the assessment engine to v1.1.0 (additive only) and updates the
+  UI-preservation snapshot hash for the engine file in a reviewed
+  commit; all HTML files remain byte-identical.
+- **Decision needed:** Review and approve the merge into `main`
+  (note: `main` is at `dc5d42d`; the foundation branch it builds on
+  is itself unmerged — merging order is Marcus's call); any
+  deployment is a separate decision after that.
 - **Blocked until decided:** merge; any deployment.
 
 ## 10. Assessment branch cleanup (no approval needed, for awareness)
