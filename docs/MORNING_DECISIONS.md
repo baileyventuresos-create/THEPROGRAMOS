@@ -129,7 +129,11 @@ continued around every item; nothing is stalled except the item itself.
   adapter, but the battery itself is NEEDS VALIDATION in the prototype
   (hand-timed sprints, no agreed reaction test, vertical jump method
   undecided). Nothing here represents any assessment as clinically or
-  scientifically validated.
+  scientifically validated. Update 2026-11-12: the universal GAA v1
+  protocol (`server/assessment-battery.js`, protocol `gaa-v1`) is now
+  written with standardized instructions, safety, and validity
+  criteria — but it is still unvalidated in the field and this
+  decision is unchanged.
 - **Decision needed:** Approve the battery/protocols/timing method and
   retest interval before assessment results are shown to parents as
   anything more than coach-recorded measurements; approve the athlete
@@ -147,6 +151,62 @@ continued around every item; nothing is stalled except the item itself.
   deployment pipeline for this repo at all).
 - **Blocked until decided:** merge; any deployment.
 
+## 11. Apply migration 004 (assessment + reassessment) to TheProgramOS
+
+- **Context:** Migration `server/migrations/004_assessment_reassessment.sql`
+  was written and reviewed 2026-11-12 on branch
+  `feature/universal-assessment-reassessment-v1`. It is ADDITIVE:
+  5 GAA assessment definitions (incl. observation-only movement
+  assessment), `assessment_schedules`, `assessment_deferrals`,
+  `development_plans` (CHECK: a finalized plan must name its baseline
+  session), `assessment_sessions.idempotency_key` + partial unique
+  index, and RLS policies mirroring 003. It does not alter or delete
+  any existing table except two additive changes to
+  `assessment_definitions` (a `kind` column + relaxed direction/
+  aggregation CHECKs) and one nullable column on
+  `assessment_sessions`. It has NOT been applied anywhere and has NOT
+  run against any Postgres in this session (SQL-invariant tests only).
+  The target project is EMPTY of real athlete data (verified
+  2026-11-12: 0 tables in public before 001–003, 0 auth users).
+- **Decision needed:** Approve applying 004 to TheProgramOS (directly,
+  or to a scratch copy first), and whether to run the live
+  verification checks after (tables/definitions/policies counts,
+  idempotency + concurrency checks, RLS scoping).
+- **Blocked until decided:** any live use of the GAA battery,
+  reassessment schedules, deferrals, or plan gating; API methods for
+  assessments; any UI integration with live assessment data.
+- **Status 2026-11-13 — APPLIED AND VERIFIED:** Marcus approved
+  applying 004 (with the Edge Function decision) on 2026-11-13.
+  Applied the same day via the dashboard SQL editor (GitHub sign-in
+  as `baileyventuresos-create`; the file was pasted verbatim, single
+  transaction, "Success. No rows returned."). Pre-checks matched
+  exactly (22 tables / 58 policies / 10 definitions / 0 rows; no 004
+  tables present; 003 helpers present). Post-apply verification
+  matched exactly (26 tables / 15 definitions / 72 policies / 0 new
+  rows; RLS on all four new tables; `uq_asess_idempotency` present;
+  the `development_plans` CHECK carries the override fix). No test
+  data added, no other changes. The plan's §5 live functional checks
+  were RUN 2026-11-13 (Marcus approved the run that day): 17/17 PASS,
+  cleanup PASS, project back to 26 tables / 15 definitions / 72 policies
+  / 0 rows — full record in `server/live-checks/004/RESULTS.md`. The
+  grants pre-flight also passed live, so INSERT grants exist and no
+  GRANT was needed.
+
+## 12. Merge and deployment — universal-assessment branch
+
+- **Context:** Branch `feature/universal-assessment-reassessment-v1`
+  is pushed and a draft PR is opened (see
+  `docs/ASSESSMENT_REASSESSMENT_HANDOFF.md` §6). It touches no HTML
+  files and no production system, but it is **not merged**. It extends
+  the assessment engine to v1.1.0 (additive only) and updates the
+  UI-preservation snapshot hash for the engine file in a reviewed
+  commit; all HTML files remain byte-identical.
+- **Decision needed:** Review and approve the merge into `main`
+  (note: `main` is at `dc5d42d`; the foundation branch it builds on
+  is itself unmerged — merging order is Marcus's call); any
+  deployment is a separate decision after that.
+- **Blocked until decided:** merge; any deployment.
+
 ## 10. Assessment branch cleanup (no approval needed, for awareness)
 
 - **Context:** `feature/assessment-engine-v1` is fully contained in
@@ -154,3 +214,102 @@ continued around every item; nothing is stalled except the item itself.
 - **Action proposed:** delete the branch after this work merges, to avoid
   confusion. No approval required to note it; deletion itself can wait
   for the merge decision.
+
+## 13. API transport for the assessment workflow — RESOLVED 2026-11-13
+
+- **Decision (Marcus, 2026-11-13): Edge Function.** The assessment
+  workflow API is hosted as a Supabase Edge Function. Rationale:
+  the app is a static site with no host, and both APIs take a
+  verified Supabase Auth JWT, so an Edge Function lives in the
+  project already chosen, with JWT verification built in. Choosing
+  it settles the design only — **nothing is deployed**.
+- **Context:** The assessment workflow (`server/assessment-workflow.js`)
+  and its authenticated API (`server/assessment-api.js`) are
+  transport-agnostic, exactly like the reservation API: they take an
+  injected auth context derived from a verified Supabase Auth JWT and
+  never parse tokens themselves. Nothing in this branch hosts them.
+- **Scaffold (local only, UNDEPLOYED):**
+  `supabase/functions/assessment-api/` — `index.ts` (JWT verify +
+  dispatch), `api.ts` (role table port), `directory.ts` (auth
+  context from the verified JWT, mirroring migration 003 helpers),
+  `store.ts` (PostgREST store adapters), `workflow.ts` + `build.mjs`
+  (esbuild bundle of the tested Node workflow modules), `README.md`,
+  `deno.json`, `supabase/config.toml` (`verify_jwt = true`). The
+  bundle step and the dispatch layer were verified locally (see the
+  function README §5); `deno check` / `supabase functions serve`
+  have not been run. No deploy, no secrets, no env changes.
+- **Known gaps recorded in the function README §4 (decide before
+  any deploy):** (1) the workflow bundle is generated, not
+  committed; (2) `modified` / `capped` result flags have no columns
+  in `assessment_results` (needs a small additive migration, a 005
+  candidate); (3) adult athletes cannot be stored yet
+  (`athletes.age_years` CHECK 5–19 — needs a 005 candidate to
+  relax); (4) migration 004 must be applied before any deploy.
+- **Blocked until decided:** nothing on transport — decided. Still
+  blocked: any live use of the assessment API (needs 004 applied);
+  UI integration with live assessment data.
+
+## 14. Prototype Assessments view copy is stale (new, from integration)
+
+- **Context:** `THE PROGRAM OS.html` `vAssess()` still describes the
+  assessment battery as an unapproved proposal ("nothing here is
+  approved, and these numbers are not being collected today") with a
+  "~12 weeks" retest interval listed as an ASSUMPTION. The engine
+  now implements the standardized GAA battery on a 28-day cycle.
+  The HTML was deliberately NOT edited during integration (UI
+  preservation); the dashboard "due for re-testing" card also still
+  reads prototype demo data instead of the reassessment engine.
+- **Decision needed:** Approve refreshing the Assessments view copy
+  (and wiring the dashboard due-card to `coachDashboard()`) as a
+  minimal, additive UI update — no redesign, no layout change.
+- **Blocked until decided:** any HTML change to the Assessments view
+  or dashboard card.
+
+## 15. Unified athlete system — migration 005 (new, Marcus correction 2026-11-13)
+
+- **Context:** Marcus corrected the previous direction: The Program OS
+  serves athletes of all ages under ONE unified athlete system. Age
+  is an athlete attribute, not a division. There are no youth/adult
+  divisions, no new membership categories, and no pricing change.
+  Audit (2026-11-13, full-repo grep): the 19-year-old maximum lived
+  in exactly ONE enforcement point — `athletes.age_years CHECK
+  (age_years BETWEEN 5 AND 19)` in migration 001. No code file
+  enforces an age maximum; no test asserted one. Kept deliberately:
+  per-cohort age bands (cohort eligibility, not divisions), the
+  under-18 youth-growth caveat in progress calculation, youth/adult
+  protocol alternatives in the GAA battery, and parent-books-for-minor.
+- **What was built (branch, unapplied):** migration 005
+  (`server/migrations/005_unified_athlete_age_and_result_flags.sql`,
+  Postgres 15 compatible, additive only) does exactly two things:
+  (1) removes the 19 maximum — re-issues the CHECK as
+  `age_years >= 5` (floor kept as a data-sanity guard; it is the
+  original minimum and the youngest cohort starts at 8); the old
+  CHECK is dropped by definition match, so re-runs are safe;
+  (2) adds `modified` / `capped` BOOLEAN NOT NULL DEFAULT FALSE to
+  `assessment_results` — columns the store and the Edge Function
+  scaffold already expect. No new tables, no policy changes, no
+  seed data, no pricing/division/category changes. The Edge Function
+  scaffold's README and gap comments now point at 005, and its
+  deploy prerequisites are 004 + 005.
+- **Decision needed:** Approve applying migration 005 to
+  TheProgramOS (after 004, which is being applied separately in
+  the browser task; 005 does not depend on 004). Application only —
+  not merge, deploy, production use, or billing.
+- **Status 2026-11-13 — APPLIED AND VERIFIED:** Marcus approved
+  applying 005 the same day. Applied via the dashboard SQL editor
+  (GitHub sign-in as `baileyventuresos-create`). Pre-check passed
+  (26/15/72/0, old CHECK present, new columns absent). Post-apply
+  verification: 26 tables / 15 definitions / 72 policies / 0 rows;
+  `modified`/`capped` BOOLEAN NOT NULL DEFAULT FALSE;
+  age CHECK now `age_years >= 5` with no upper bound and no division
+  column; all 25 assessment policies present by name; behavioral
+  re-check 6/6 PASS (adult 48 + youth 12 in one table, age 5
+  inserts, age 4 rejected, flags round-trip, defaults FALSE);
+  cleanup PASS, no test data remains. Full record in
+  `server/live-checks/005/RESULTS.md` (branch head 8f0cd41).
+  Edge Function deploy prerequisites (004 + 005) are now both met
+  at the schema level; deploy still needs separate approval.
+- **Blocked until decided:** storing any adult athlete as an
+  `athletes` row; any Edge Function insert/select on
+  `assessment_results` (the `modified` / `capped` columns do not
+  exist until 005 is applied).

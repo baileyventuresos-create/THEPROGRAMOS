@@ -92,12 +92,22 @@ test('evidence for Smart Draft is derived evidence only, labelled as such', asyn
   assert.equal(ev.evidence[0].domain, 'horizontal_power');
 });
 
-test('migration 002 seeds exactly the engine V1 definitions', () => {
+test('migrations 002 + 004 seed exactly the engine definitions (V1 in 002, GAA in 004)', () => {
   const fs = require('node:fs');
-  const sql = fs.readFileSync(require('node:path').join(__dirname, '..', 'migrations', '002_assessment_persistence.sql'), 'utf8');
+  const path = require('node:path');
+  const sql002 = fs.readFileSync(path.join(__dirname, '..', 'migrations', '002_assessment_persistence.sql'), 'utf8');
+  const sql004 = fs.readFileSync(path.join(__dirname, '..', 'migrations', '004_assessment_reassessment.sql'), 'utf8');
+  const v1 = ['10yd-sprint', 'broad-jump', 'rotational-scoop-r', 'rotational-scoop-l',
+    'push-ups', 'side-plank-r', 'side-plank-l', 'throw-velo', 'throw-accuracy', 'exit-velo'];
+  const gaa = ['5-10-5-shuttle', 'single-leg-balance-r', 'single-leg-balance-l',
+    '6min-walk-run', 'movement-assessment'];
+  for (const id of v1) assert.ok(sql002.includes(`('${id}'`), `migration 002 seeds ${id}`);
+  for (const id of gaa) assert.ok(sql004.includes(`('${id}'`), `migration 004 seeds ${id}`);
   for (const id of Object.keys(Engine.definitions)) {
-    assert.ok(sql.includes(`('${id}'`), `migration seeds ${id}`);
+    assert.ok(sql002.includes(`('${id}'`) || sql004.includes(`('${id}'`), `a migration seeds ${id}`);
   }
-  assert.match(sql, /kind TEXT NOT NULL CHECK \(kind IN \('observation','interpretation'\)\)/);
-  assert.match(sql, /attempts JSONB NOT NULL/);
+  assert.match(sql002, /kind TEXT NOT NULL CHECK \(kind IN \('observation','interpretation'\)\)/);
+  assert.match(sql002, /attempts JSONB NOT NULL/);
+  assert.match(sql004, /idempotency_key/);
+  assert.match(sql004, /uq_asess_idempotency[\s\S]*\(athlete_id, idempotency_key\)/);
 });
