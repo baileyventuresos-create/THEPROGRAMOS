@@ -109,5 +109,5 @@ test('migrations 002 + 004 seed exactly the engine definitions (V1 in 002, GAA i
   assert.match(sql002, /kind TEXT NOT NULL CHECK \(kind IN \('observation','interpretation'\)\)/);
   assert.match(sql002, /attempts JSONB NOT NULL/);
   assert.match(sql004, /idempotency_key/);
-  assert.match(sql004, /UNIQUE \(athlete_id, idempotency_key\)/);
+  assert.match(sql004, /uq_asess_idempotency[\s\S]*\(athlete_id, idempotency_key\)/);
 });
