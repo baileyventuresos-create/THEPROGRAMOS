@@ -75,6 +75,27 @@ test('005 scripts contain no destructive operations', () => {
   assert.ok(migration.includes('ADD COLUMN IF NOT EXISTS capped BOOLEAN NOT NULL DEFAULT FALSE'), 'migration adds capped');
 });
 
+test('005 behavioral re-check script is safe and its summary is last', () => {
+  const behavioral = readFileSync(path.join(root, 'live-checks/005/02-verify-behavioral.sql'), 'utf8');
+  for (const uuid of TEST_UUIDS) {
+    assert.ok(behavioral.includes(uuid), `behavioral script missing UUID ${uuid}`);
+  }
+  // The summary SELECT must be the last statement, so the dashboard
+  // (which shows only the last result set) displays the verdicts.
+  const lastStatement = behavioral.trim().split(';').map((s) => s.trim()).filter(Boolean).pop();
+  assert.ok(lastStatement.startsWith('SELECT check_id, status, detail FROM _tst005b_results'),
+    `last statement must be the summary SELECT, found: ${lastStatement.slice(0, 80)}`);
+  const drops = behavioral.match(/DROP\s+TABLE[^;]*;/gi) || [];
+  for (const drop of drops) {
+    assert.ok(/_tst005b_results/.test(drop), `only the temp results table may be dropped, found: ${drop}`);
+  }
+  assert.ok(!/TRUNCATE/i.test(behavioral), 'behavioral: no TRUNCATE');
+  const deletes = behavioral.match(/DELETE\s+FROM[^;]*;/gi) || [];
+  for (const del of deletes) {
+    assert.ok(/WHERE/i.test(del), `behavioral: DELETE without WHERE: ${del.slice(0, 60)}`);
+  }
+});
+
 test('005 verify script expects the post-004 baseline', () => {
   assert.ok(verify.includes('26 tables'), 'V1 expects 26 tables');
   assert.ok(verify.includes('72 policies'), 'V1/V8 expect 72 policies');
