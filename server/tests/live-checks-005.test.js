@@ -57,8 +57,11 @@ test('005 scripts contain no destructive operations', () => {
       assert.ok(/_tst005_results/.test(drop), `${name}: only the temp results table may be dropped, found: ${drop}`);
     }
     assert.ok(!/TRUNCATE/i.test(sql), `${name}: no TRUNCATE`);
-    assert.ok(!/DELETE\s+FROM\s+\w+\s*;/i.test(sql), `${name}: no unscoped DELETE`);
-    assert.ok(!/DELETE\s+FROM\s+\w+\s*$/im.test(sql), `${name}: no DELETE without WHERE`);
+    // Every DELETE statement must carry a WHERE clause.
+    const deletes = sql.match(/DELETE\s+FROM[^;]*;/gi) || [];
+    for (const del of deletes) {
+      assert.ok(/WHERE/i.test(del), `${name}: DELETE without WHERE: ${del.slice(0, 60)}`);
+    }
   }
   // The migration itself: the only DROP is the old CHECK constraint
   // (by definition match); no table/column drops, no TRUNCATE, no DELETE.
