@@ -25,15 +25,39 @@ test('migration 004 is a reviewed-only, transactional, additive migration', () =
   assert.ok(!/TRUNCATE/i.test(body), 'nothing is truncated');
 });
 
-test('migration 004 creates the schedule, deferral, and plan tables', () => {
-  for (const table of ['assessment_schedules', 'assessment_deferrals', 'development_plans']) {
+test('migration 004 creates the schedule, deferral, draft, and plan tables', () => {
+  for (const table of ['assessment_schedules', 'assessment_deferrals', 'assessment_drafts', 'development_plans']) {
     assert.match(sql, new RegExp(`CREATE TABLE IF NOT EXISTS ${table}`), `${table} is created`);
     assert.match(sql, new RegExp(`ALTER TABLE ${table} ENABLE ROW LEVEL SECURITY`), `${table} has RLS`);
   }
   assert.match(sql, /UNIQUE \(athlete_id, battery\)/, 'one schedule row per athlete + battery');
-  assert.match(sql, /CHECK \(status <> 'finalized' OR baseline_session_id IS NOT NULL\)/,
-    'a finalized plan must name its baseline session');
+  assert.match(sql, /UNIQUE \(athlete_id, battery\)/, 'one draft per athlete + battery');
+  // A finalized plan must name its baseline session OR carry a recorded
+  // coach override. The override path (baseline-gating finalizePlan)
+  // finalizes with NO baseline session; the pre-integration CHECK
+  // (baseline_session_id IS NOT NULL) would have rejected exactly
+  // those rows. The CHECK below pins the fixed form.
+  assert.match(sql, /CHECK \(status <> 'finalized'\s+OR baseline_session_id IS NOT NULL\s+OR override_reason IS NOT NULL\)/,
+    'a finalized plan must name its baseline session or a recorded override');
   assert.match(sql, /deferred_until IS NOT NULL/, 'a deferral needs a deferred-until date');
+});
+
+test('migration 004 gives coaches scoped, insert-only write access to assessment history', () => {
+  for (const [policy, table] of [['asess_coach_write', 'assessment_sessions'],
+    ['ares_coach_write', 'assessment_results'], ['ader_coach_write', 'assessment_derived_records']]) {
+    assert.match(sql, new RegExp(`CREATE POLICY ${policy} ON ${table} FOR INSERT TO authenticated`),
+      `${policy} is insert-only for coaches on ${table}`);
+  }
+  assert.match(sql, /asess_coach_write ON assessment_sessions FOR INSERT TO authenticated\s*\n\s*WITH CHECK \(public\.app_role\(\) = 'coach' AND public\.is_my_cohort_athlete\(athlete_id\)\)/,
+    'coach assessment writes are scoped to their own cohort athletes');
+  // No UPDATE/DELETE policies for coaches on history tables: history
+  // is immutable; only INSERT is granted.
+  assert.ok(!/CREATE POLICY \w+_coach\w* ON assessment_(sessions|results|derived_records) FOR (UPDATE|DELETE|ALL)/.test(sql),
+    'no coach UPDATE/DELETE/ALL policy on assessment history tables');
+  // Drafts are coach working state: director + coach only, no owner policy.
+  assert.match(sql, /CREATE POLICY adrft_director ON assessment_drafts FOR ALL TO authenticated/);
+  assert.match(sql, /CREATE POLICY adrft_coach ON assessment_drafts FOR ALL TO authenticated/);
+  assert.ok(!/CREATE POLICY adrft_owner/.test(sql), 'drafts are never visible to parents/athletes');
 });
 
 test('migration 004 adds the idempotency key and unique index', () => {

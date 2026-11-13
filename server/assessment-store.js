@@ -63,10 +63,30 @@ function uid(prefix) {
 function clone(o) { return o == null ? o : JSON.parse(JSON.stringify(o)); }
 
 class MemoryAssessmentStore {
-  constructor() { this.sessions = []; this.results = []; this.derived = []; }
+  constructor() { this.sessions = []; this.results = []; this.derived = []; this.drafts = []; }
   async insertSession(row) { this.sessions.push(clone(row)); return clone(row); }
   async insertResult(row) { this.results.push(clone(row)); return clone(row); }
   async insertDerived(row) { this.derived.push(clone(row)); return clone(row); }
+  /* Drafts (incomplete assessments): one per athlete + battery.
+   * A draft is working state, not history — it never counts toward a
+   * baseline, progress, or a due date, and it is deleted when the
+   * assessment is completed. Postgres side: assessment_drafts in
+   * migration 004 (UNIQUE athlete_id + battery). */
+  async upsertDraft(row) {
+    const i = this.drafts.findIndex(d => d.athleteId === row.athleteId && d.battery === row.battery);
+    const saved = clone(row);
+    if (i >= 0) this.drafts[i] = saved; else this.drafts.push(saved);
+    return clone(saved);
+  }
+  async getDraft(athleteId, battery) {
+    const d = this.drafts.find(d => d.athleteId === athleteId && d.battery === battery);
+    return d ? clone(d) : null;
+  }
+  async deleteDraft(athleteId, battery) {
+    const i = this.drafts.findIndex(d => d.athleteId === athleteId && d.battery === battery);
+    if (i >= 0) this.drafts.splice(i, 1);
+    return true;
+  }
   async listResults(athleteId, assessmentId) {
     return this.results.filter(r => r.athleteId === athleteId && (!assessmentId || r.assessmentId === assessmentId))
       .sort((a, b) => a.recordedAt.localeCompare(b.recordedAt)).map(clone);
