@@ -186,7 +186,11 @@ continued around every item; nothing is stalled except the item itself.
   rows; RLS on all four new tables; `uq_asess_idempotency` present;
   the `development_plans` CHECK carries the override fix). No test
   data added, no other changes. The plan's §5 live functional checks
-  were NOT run — they write test rows and need separate approval.
+  were RUN 2026-11-13 (Marcus approved the run that day): 17/17 PASS,
+  cleanup PASS, project back to 26 tables / 15 definitions / 72 policies
+  / 0 rows — full record in `server/live-checks/004/RESULTS.md`. The
+  grants pre-flight also passed live, so INSERT grants exist and no
+  GRANT was needed.
 
 ## 12. Merge and deployment — universal-assessment branch
 
