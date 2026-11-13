@@ -175,6 +175,14 @@ continued around every item; nothing is stalled except the item itself.
 - **Blocked until decided:** any live use of the GAA battery,
   reassessment schedules, deferrals, or plan gating; API methods for
   assessments; any UI integration with live assessment data.
+- **Status 2026-11-13 — APPROVED, NOT YET APPLIED:** Marcus approved
+  applying 004 (with the Edge Function decision) on 2026-11-13.
+  Application has NOT been performed: it requires the dashboard
+  SQL-editor browser route (the Supabase Management API token is
+  dead), and that step is still pending. Pre-checks (22 tables /
+  58 policies / 10 definitions / 0 rows) have NOT been run against
+  live. Do not mark 004 as applied until the execution plan's §4
+  verification counts (26 / 15 / 72 / 0) are recorded.
 
 ## 12. Merge and deployment — universal-assessment branch
 
@@ -199,19 +207,38 @@ continued around every item; nothing is stalled except the item itself.
   confusion. No approval required to note it; deletion itself can wait
   for the merge decision.
 
-## 13. API transport for the assessment workflow (new, from integration)
+## 13. API transport for the assessment workflow — RESOLVED 2026-11-13
 
+- **Decision (Marcus, 2026-11-13): Edge Function.** The assessment
+  workflow API is hosted as a Supabase Edge Function. Rationale:
+  the app is a static site with no host, and both APIs take a
+  verified Supabase Auth JWT, so an Edge Function lives in the
+  project already chosen, with JWT verification built in. Choosing
+  it settles the design only — **nothing is deployed**.
 - **Context:** The assessment workflow (`server/assessment-workflow.js`)
   and its authenticated API (`server/assessment-api.js`) are
   transport-agnostic, exactly like the reservation API: they take an
   injected auth context derived from a verified Supabase Auth JWT and
   never parse tokens themselves. Nothing in this branch hosts them.
-  The two candidate hosts are a Supabase Edge Function or a server
-  route on the application's host (when one exists — there is
-  currently no deployment pipeline for this repo at all).
-- **Decision needed:** Edge Function or server route (or another host
-  Marcus prefers), and who wires the JWT verification.
-- **Blocked until decided:** any live use of the assessment API;
+- **Scaffold (local only, UNDEPLOYED):**
+  `supabase/functions/assessment-api/` — `index.ts` (JWT verify +
+  dispatch), `api.ts` (role table port), `directory.ts` (auth
+  context from the verified JWT, mirroring migration 003 helpers),
+  `store.ts` (PostgREST store adapters), `workflow.ts` + `build.mjs`
+  (esbuild bundle of the tested Node workflow modules), `README.md`,
+  `deno.json`, `supabase/config.toml` (`verify_jwt = true`). The
+  bundle step and the dispatch layer were verified locally (see the
+  function README §5); `deno check` / `supabase functions serve`
+  have not been run. No deploy, no secrets, no env changes.
+- **Known gaps recorded in the function README §4 (decide before
+  any deploy):** (1) the workflow bundle is generated, not
+  committed; (2) `modified` / `capped` result flags have no columns
+  in `assessment_results` (needs a small additive migration, a 005
+  candidate); (3) adult athletes cannot be stored yet
+  (`athletes.age_years` CHECK 5–19 — needs a 005 candidate to
+  relax); (4) migration 004 must be applied before any deploy.
+- **Blocked until decided:** nothing on transport — decided. Still
+  blocked: any live use of the assessment API (needs 004 applied);
   UI integration with live assessment data.
 
 ## 14. Prototype Assessments view copy is stale (new, from integration)

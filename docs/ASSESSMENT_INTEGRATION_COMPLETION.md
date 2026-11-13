@@ -191,3 +191,39 @@ What still needs Marcus:
 with tests on the branch. The execution plan (§4/§7), the API
 transport choice, and the UI wiring are designs/decisions, not
 code — they are labelled as such wherever they appear.
+
+## Addendum — 2026-11-13: migration 004 approved, Edge Function decided
+
+- **Migration 004: APPROVED by Marcus 2026-11-13, NOT YET APPLIED.**
+  Application requires the dashboard SQL-editor browser route (the
+  Supabase Management API token is dead) and is still pending. The
+  migration file was re-read in full and confirmed to be the reviewed
+  version on the branch (header `STATUS: NOT APPLIED`, the
+  `development_plans` CHECK with `OR override_reason IS NOT NULL`,
+  `assessment_drafts`, and the `asess_coach_write` /
+  `ares_coach_write` / `ader_coach_write` policies). Pre-checks
+  (22 tables / 58 policies / 10 definitions / 0 rows) have NOT been
+  run against live in this step. Apply per
+  `docs/MIGRATION_EXECUTION_PLAN.md` §2–§4 and record the verified
+  counts (expected 26 / 15 / 72 / 0) before marking §11 complete.
+- **API transport: RESOLVED — Supabase Edge Function** (Marcus
+  2026-11-13; decision §13). Scaffold only, in
+  `supabase/functions/assessment-api/` (`index.ts`, `api.ts`,
+  `directory.ts`, `store.ts`, `workflow.ts`, `entry.mjs`,
+  `build.mjs`, `README.md`, `deno.json`, plus
+  `supabase/config.toml` with `verify_jwt = true`). **NOT deployed:**
+  no deploy command ran, no secrets set, no env changes.
+  Verified locally: esbuild bundle generates (84.3 kB) and the
+  bundled workflow runs; the dispatch/auth layer passes its smoke
+  checks; `tsc --noEmit --strict` is clean (Deno + supabase-js
+  stubbed). `deno check` / `supabase functions serve` not run.
+- **Gaps found while scaffolding (recorded in the function README
+  §4, to decide before any deploy):** (1) the workflow bundle is
+  generated, not committed; (2) `modified` / `capped` result flags
+  have no columns in `assessment_results` — needs a small additive
+  migration (005 candidate); (3) adult athletes cannot be stored
+  yet (`athletes.age_years` CHECK 5–19 — needs a 005 candidate to
+  relax); (4) 004 must be applied before any deploy.
+- Release sequence steps 1 and 4 from §7 are now: (1) apply 004
+  (approved — browser step pending); (4) transport decided (Edge
+  Function — scaffold done, deploy is a separate approval).
