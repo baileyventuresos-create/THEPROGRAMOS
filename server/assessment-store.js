@@ -31,10 +31,28 @@
  * insertResult(resultRow), insertDerived(derivedRow), listResults(athleteId,
  * assessmentId), listSessions(athleteId). MemoryAssessmentStore (below)
  * implements it for tests; the PostgreSQL tables are migrations/002.
+ *
+ * GAA extensions (universal assessment, 2026-11-12):
+ *   - Idempotency: meta.idempotencyKey makes a recording retry-safe.
+ *     A second call with the same key for the same athlete returns
+ *     the originally stored session (idempotentReplay: true) and
+ *     inserts nothing. Postgres enforces the same rule with the
+ *     unique index in migration 004.
+ *   - Movement assessment: the entry 'movement-assessment' is
+ *     observation-only. It is stored as an observation record (coach
+ *     words), never as a measured result; the engine never sees it.
+ *   - Modified results: an entry may carry modified: true (an
+ *     age-appropriate alternative or accommodation was used). The flag
+ *     is stored on the result row so a modified result is never
+ *     silently compared against a standard-protocol baseline.
+ *   - GAA protocol validation: sessions with battery
+ *     'generalAthleticAssessment' have their attempts validated
+ *     against server/assessment-battery.js before anything is stored.
  */
 'use strict';
 
 const Engine = require('../assessment-engine/assessment-engine.js');
+const { validateAttempts } = require('./assessment-battery');
 
 const RECORD_KINDS = ['measured', 'observation', 'interpretation'];
 const ASYMMETRY_CAVEAT = 'Product signal only (engine V1: >=15% bilateral difference = "monitor"). Not a medical threshold, diagnosis, or clearance.';
@@ -57,6 +75,14 @@ class MemoryAssessmentStore {
     return this.sessions.filter(s => s.athleteId === athleteId)
       .sort((a, b) => a.recordedAt.localeCompare(b.recordedAt)).map(clone);
   }
+  async findSessionByIdempotencyKey(athleteId, key) {
+    if (!key) return null;
+    const s = this.sessions.find(s => s.athleteId === athleteId && s.idempotencyKey === key);
+    return s ? clone(s) : null;
+  }
+  async listDerivedBySession(sessionId) {
+    return this.derived.filter(d => d.sessionId === sessionId).map(clone);
+  }
 }
 
 /* Validate + persist one engine buildSession() output.
@@ -67,11 +93,44 @@ class MemoryAssessmentStore {
 async function recordAssessmentSession(store, input) {
   if (!input || !input.athleteId) throw new Error('athleteId is required.');
   if (!Array.isArray(input.entries) || !input.entries.length) throw new Error('At least one assessment entry is required.');
-  const session = Engine.buildSession(input.athleteId, input.entries, input.meta || {});
+  const idempotencyKey = (input.meta && input.meta.idempotencyKey) || null;
+  if (idempotencyKey && typeof store.findSessionByIdempotencyKey === 'function') {
+    const existing = await store.findSessionByIdempotencyKey(String(input.athleteId), idempotencyKey);
+    if (existing) {
+      const results = (await store.listResults(existing.athleteId)).filter(r => r.sessionId === existing.id);
+      const derived = typeof store.listDerivedBySession === 'function'
+        ? await store.listDerivedBySession(existing.id) : [];
+      return { session: existing, results, observations: derived.filter(d => d.kind === 'observation'),
+        interpretations: derived.filter(d => d.kind === 'interpretation'), idempotentReplay: true };
+    }
+  }
+  // Split observation-only entries (movement assessment) from measured
+  // entries. The engine only ever sees measured entries.
+  const observationEntries = [];
+  const measuredEntries = [];
+  for (const e of input.entries) {
+    if (e.assessmentId === 'movement-assessment') {
+      const text = e.observations || e.text || e.notes;
+      if (!text) throw new Error('Movement assessment requires written observations.');
+      observationEntries.push({ ...e, text: String(text) });
+    } else measuredEntries.push(e);
+  }
+  if (measuredEntries.length) {
+    // GAA protocol validation runs before anything is stored.
+    const battery = (input.meta && input.meta.battery) || '';
+    if (battery === 'generalAthleticAssessment') {
+      for (const e of measuredEntries) {
+        const check = validateAttempts(e.assessmentId, e.attempts);
+        if (!check.ok) throw new Error(`Invalid attempts for ${e.assessmentId}: ${check.reasons.join(' ')}`);
+      }
+    }
+  }
+  const session = Engine.buildSession(input.athleteId, measuredEntries, input.meta || {});
   const sessionRow = {
     id: uid('asess'), athleteId: String(input.athleteId), coachId: input.coachId || null,
     battery: session.battery, recordedAt: session.recordedAt,
     context: (input.meta && input.meta.context) || null, engineVersion: Engine.version,
+    idempotencyKey,
   };
   await store.insertSession(sessionRow);
   const stored = { session: sessionRow, results: [], observations: [], interpretations: [] };
@@ -82,7 +141,9 @@ async function recordAssessmentSession(store, input) {
     const resultRow = { id: uid('ares'), sessionId: sessionRow.id, athleteId: session.athleteId,
       assessmentId: r.assessmentId, kind: 'measured', attempts: r.attempts, result: r.result,
       unit: def.unit, direction: def.direction, protocolVersion: def.retestDays ? `v1-retest-${def.retestDays}d` : 'v1',
-      recordedAt: session.recordedAt };
+      recordedAt: session.recordedAt,
+      modified: measuredEntries.find(e => e.assessmentId === r.assessmentId)?.modified === true,
+      capped: measuredEntries.find(e => e.assessmentId === r.assessmentId)?.capped === true };
     await store.insertResult(resultRow);
     stored.results.push(resultRow);
     if (r.notes) {
@@ -109,6 +170,14 @@ async function recordAssessmentSession(store, input) {
         await store.insertDerived(row); stored.interpretations.push(row);
       }
     }
+  }
+  // Movement assessment observations: coach words, stored as
+  // observations — never as measurements, never scored.
+  for (const e of observationEntries) {
+    const obs = { id: uid('aobs'), sessionId: sessionRow.id, athleteId: session.athleteId,
+      assessmentId: 'movement-assessment', kind: 'observation', text: e.text,
+      recordedAt: session.recordedAt };
+    await store.insertDerived(obs); stored.observations.push(obs);
   }
   // Bilateral pairs recorded in the same session get an asymmetry signal.
   const byPair = {};
