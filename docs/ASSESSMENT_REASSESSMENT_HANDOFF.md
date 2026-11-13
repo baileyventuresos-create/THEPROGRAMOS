@@ -192,6 +192,7 @@ This mission only, vs base `e4da6cc` (19 files, +1,939 / −11):
   - `bcb952e6ad5ecd8d0e86ff4befa2f00390090556` — Tests: GAA battery, reassessment, baseline gating, progress, Smart Draft adapter, adult synthetic validation, migration 004
   - `843336bbf5250db4420d383a16490453f94ef52e` — Update preservation snapshot for intentional engine v1.1.0 extension (HTML files byte-identical)
   - `0ae2597ef40caac7164632c5c4fb6256c755b3c5` — Docs: assessment audit, reassessment handoff, morning decisions 11–12, server README
+  - `a43ec0e49b21ee30aead8fb96b75247196ae5ab8` — Record docs commit ID in handoff section 6
 - **Push / PR:** branch pushed to origin; draft PR opened, **not merged**.
 - **Working tree:** clean at handoff (`git status` clean, no uncommitted work).
 
