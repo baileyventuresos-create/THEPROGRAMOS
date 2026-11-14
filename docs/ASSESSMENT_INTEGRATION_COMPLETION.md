@@ -412,3 +412,36 @@ athlete system; age is an athlete attribute, not a division.
   only pre-deploy commands left are the ones this environment
   cannot run (`deno check`, `supabase functions serve`, deploy,
   live smoke test).
+
+## Addendum — 2026-11-14: Phase 4 full workflow testing (5-phase mission)
+- **What Phase 4 did:** mapped all 12 mission scenarios to executable
+  tests and closed the one genuine coverage gap found — network
+  interruption + retry composed end to end (client ↔ server over
+  real HTTP). Full report: `docs/PHASE4_TEST_REPORT.md`.
+- **New tests (3):** `server/tests/phase4-interruption.test.js` —
+  real `AssessmentClient` against the real dev server, with a fetch
+  wrapper faulting exactly one attempt: (1) lost `completeAssessment`
+  response after the server recorded — retry reuses the same
+  idempotency key and replays the original session, exactly one
+  session; (2) HTTP 500 on the first complete attempt — retried,
+  records once; (3) lost `recordAttempts` response — retry replays
+  the same draft, no duplicate draft, workflow then completes to
+  exactly one session. All 3 passed on first run.
+- **Capped display (1 assertion added):** a capped entry was added to
+  the `renderHistory` fixture in `server/tests/assessment-ui.test.js`;
+  the test now asserts the history view renders `120.00 sec (capped)`,
+  proving the Phase 3 `bed566d` display path end to end in the UI
+  (previously only `(modified)` was asserted in a rendered session).
+- **Tests:** full suite **249/249** (246 baseline + 3 new; the capped
+  assertion strengthened an existing test). No failures — new or
+  pre-existing — so no fixes were required and no test was weakened
+  or removed. No `.ts` files touched, so the Phase 3 `tsc` result
+  stands. No dev-server process left running (verified).
+- **Remaining for Phase 5:** the release package (integrated branch +
+  updated PR #3, deploy steps, config requirements, deployment order,
+  smoke-test checklist, rollback plan, unresolved risks) and the
+  7-item final report. Still unverified (carried over, not new):
+  real-browser render, Deno runtime behavior, RLS against the
+  function, the deployed function against live Supabase, decision
+  §14 (stale Assessments copy), and the 005 SQL file's stale
+  "NOT APPLIED" header.
