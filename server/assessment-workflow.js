@@ -117,9 +117,17 @@ function createAssessmentWorkflow({ store, reassessmentStore, planStore, directo
     const sessions = (await st.listSessions(athleteId)).map(s => ({
       id: s.id, athleteId: s.athleteId, battery: s.battery, recordedAt: s.recordedAt,
     }));
+    // Carry every field the athlete view renders in history (see
+    // athleteAssessmentView below) and the progress/advisory paths
+    // need. Dropping `capped`, `attempts`, or `unit` here used to
+    // silently blank them in history: capped results never showed
+    // "(capped)" and values lost their unit (found by the Phase 3
+    // Edge Function verification, 2026-11-14 — the view maps these
+    // fields, so loadData must carry them).
     const results = (await st.listResults(athleteId)).map(r => ({
       sessionId: r.sessionId, athleteId: r.athleteId, assessmentId: r.assessmentId,
-      result: r.result, modified: r.modified, recordedAt: r.recordedAt,
+      result: r.result, attempts: r.attempts, unit: r.unit,
+      modified: r.modified, capped: r.capped, recordedAt: r.recordedAt,
     }));
     const deferrals = await rs.listDeferrals(athleteId);
     return { sessions, results, deferrals };
