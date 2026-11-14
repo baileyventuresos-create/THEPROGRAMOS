@@ -1971,16 +1971,11 @@ function vCohort(id){
 
 /* ---------- ASSESSMENTS ---------- */
 function vAssess(){
-  const due = ATHLETES.filter(a=>a.due);
-  return head('Assessments · '+lbl('V1 — REQUIRES PROGRAM VALIDATION','needval'), 'Assessment battery', 'A proposed set of field tests so progress can be shown with real measurements instead of ratings. Nothing here is approved, and these numbers are not being collected today.') + `
-  <div class="grid g3" style="margin-bottom:16px">${[['Measured data','A number from a defined protocol, with date, tester and method stored.','v1'],['Coach observation','What a trained coach saw. Dated and signed. Never converted to a score.','v1'],['System interpretation','What the software infers (trends, PBs). Always labeled, never presented as fact.','needdef']].map(x=>`<div class="panel"><div class="pb"><div class="lbl ${x[2]}">${x[0]}</div><p class="small" style="margin:8px 0 0">${x[1]}</p></div></div>`).join('')}</div>
-  <div class="cards" style="grid-template-columns:repeat(auto-fill,minmax(300px,1fr))">${TESTS.map(t=>`<div class="panel"><div class="ph"><h3>${t.n}</h3><div class="r">${lbl(t.st)}</div></div><div class="pb small stack" style="gap:6px">
-    <div><span class="eyebrow">Measures</span><br>${t.what}</div><div><span class="eyebrow">Protocol (draft)</span><br>${t.how}</div><div><span class="eyebrow">Method concerns</span><br>${t.method}</div></div></div>`).join('')}</div>
-  <div class="grid g2" style="margin-top:16px">
-    <section class="panel"><div class="ph"><h3>Due for testing</h3><div class="r mono small">${due.length}</div></div><div class="tbl-wrap"><table class="t"><tr><th>Athlete</th><th>Cohort</th><th>Last tested</th></tr>${due.map(a=>`<tr class="click" data-ath="${a.id}"><td>${esc(a.name)}</td><td class="mono small">${a.cohort}</td><td class="small">Mar 2027</td></tr>`).join('')}</table></div></section>
-    <section class="panel"><div class="ph"><h3>Decisions needed</h3></div><div class="pb small"><ul style="margin:0;padding-left:18px">
-      <li>Retest interval — proposed every ~12 weeks ${lbl('ASSUMPTION')}</li><li>Hand-timing vs. timing gates for sprint and shuttle</li><li>Who tests: the cohort coach, or one trained tester per location for consistency?</li><li>Testing inside a regular session (costs ~15 min of play) or a separate assessment day?</li><li>Which results parents see, and when</li><li>Research the reliability of each test for ages 8–18 before locking anything</li></ul></div></section>
-  </div>`;
+  // The prototype battery cards, due table, and decisions list were removed
+  // 2026-11-14 (Marcus decision §14): the Universal Athletic Assessment
+  // workflow in assessment-ui/ is the only assessment experience. The
+  // live section is prepended at runtime by AssessmentUI.install().
+  return head('Assessments', 'Universal Athletic Assessment', 'The official assessment experience: the standardized GAA battery, recorded by the coach and reassessed every 28 days. Baselines, personal bests, and progress — no ratings.', lbl('V1'));
 }
 
 /* ---------- COACHES ---------- */
@@ -2538,7 +2533,7 @@ function athleteApp(a, embedded){
       <div class="dawg" style="margin-top:6px">You bring the DAWG.<br>We’ll build the athlete.</div>`;
   }
   if (tab==='progress'){
-    body = `<div class="note small">${lbl('V1 — REQUIRES PROGRAM VALIDATION','needval')} Tests, protocols and timing method aren’t approved. Young athletes also change with growth, not only training — read trends, not single numbers.</div>
+    body = `<div class="note small">Measured data below is demo data. Official results live in the Assessments section — recorded through the GAA workflow on a 28-day cycle. Young athletes also change with growth, not only training — read trends, not single numbers.</div>
       <section class="layer"><div class="lh">Measured data ${lbl('DEMO DATA')}</div><div class="lb">
         ${metric(TESTS[0], m.sprint)}${metric(TESTS[1], m.bj)}${metric(TESTS[2], m.agility)}${metric(TESTS[3], m.bal)}
         <div class="metric"><div class="mn">Vertical jump · Reaction</div><div class="small muted" style="margin-top:4px">Not measured. Method and equipment ${lbl('NEEDS DEFINITION')}</div></div>

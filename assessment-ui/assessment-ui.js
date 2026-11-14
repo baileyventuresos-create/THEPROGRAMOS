@@ -10,12 +10,16 @@
  *
  * How it loads (see docs/ASSESSMENT_UI_INTEGRATION.md):
  *   index.html injects this file (after assessment-client.js) before
- *   boot(). install() wraps window.vAssess / window.vAthlete — the
- *   prototype file itself is NEVER edited (UI preservation snapshot).
- *   The live section is PREPENDED to the Assessments view; the draft
- *   battery cards and decisions below it are unchanged. When the
- *   assessment service is unreachable, the prototype renders exactly
- *   as before plus a short "not connected" note.
+ *   boot(). install() wraps window.vAssess / window.vAthlete. The
+ *   prototype file was edited once, 2026-11-14, under Marcus's
+ *   decision §14 (obsolete Assessments content removed — see the
+ *   preservation-snapshot commit); the UI module still wraps
+ *   vAssess/vAthlete at runtime and never edits the file itself.
+ *   The live section is PREPENDED to the Assessments view; the
+ *   prototype battery cards below it were removed 2026-11-14
+ *   (Marcus decision §14), so the live section is now the whole
+ *   Assessments experience. When the assessment service is
+ *   unreachable, the view shows a short "not connected" note.
  *
  * What it adds (the 11-step coach workflow + athlete visibility):
  *   roster   — select an athlete from the authorized roster; due
@@ -544,8 +548,7 @@
     right += ' <button class="btn sm ghost" data-aui="refresh">Refresh</button>';
     let body = '';
     if (state.connected === false) {
-      body += '<p class="muted" style="margin:0">Assessment service not connected — showing the draft battery below. '
-        + 'Start the dev server (<span class="mono">npm run dev</span>) to record assessments.</p>';
+      body += '<p class="muted" style="margin:0">Assessment service not connected — start the dev server (<span class="mono">npm run dev</span>) to record assessments.</p>';
     } else if (state.connected !== true) {
       body += '<p class="muted" style="margin:0">Connecting to the assessment service…</p>';
     } else {
