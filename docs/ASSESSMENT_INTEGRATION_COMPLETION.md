@@ -445,3 +445,27 @@ athlete system; age is an athlete attribute, not a division.
   function, the deployed function against live Supabase, decision
   §14 (stale Assessments copy), and the 005 SQL file's stale
   "NOT APPLIED" header.
+
+## Addendum — 2026-11-14: Phase 5 release package (5-phase mission)
+- **What Phase 5 did:** assembled the release package on the branch
+  (no code changes): `docs/RELEASE_READINESS.md` (integrated branch
+  + PR info, Edge Function readiness, deployment order, production
+  smoke-test checklist, rollback/recovery plan, Supabase config
+  requirements, unresolved risks, readiness verdict); §16 added to
+  `docs/MORNING_DECISIONS.md`; PR #3 description updated to current
+  state (was stale: said 004 NOT applied, 140/140 tests); the deploy
+  doc's prerequisite row corrected to the final suite count.
+- **Final state:** branch head `ad89aae` + Phase 5 doc commits,
+  pushed, tree clean; full suite **249/249** re-run at the end of
+  Phase 5. `main` untouched at `dc5d42d`.
+- **Verdict: code-complete and verified — NOT yet ready for
+  production.** Blocked only on Marcus's approvals and the
+  deploy-time checks: decide §14, first manual browser pass, merge
+  PR #2 then PR #3, deploy the Edge Function, deploy the production
+  application, production smoke test. Exact sequence:
+  `docs/RELEASE_READINESS.md` §7. Ready to merge: PR #2 — YES;
+  PR #3 — YES on code/tests (GitHub mergeability confirmable only
+  after PR #2 merges).
+- **Boundaries kept:** no merge, no Edge Function deploy, no
+  production deploy, no production env/migration/data changes,
+  nothing on Neon/Taskmill/MARVIN, synthetic data only.

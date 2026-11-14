@@ -323,3 +323,37 @@ continued around every item; nothing is stalled except the item itself.
   `athletes` row; any Edge Function insert/select on
   `assessment_results` (the `modified` / `capped` columns do not
   exist until 005 is applied).
+
+## 16. Release readiness — assessment integration complete (2026-11-14)
+
+- **Context:** Marcus's mission "COMPLETE ASSESSMENT INTEGRATION &
+  RELEASE READINESS" (2026-11-13) ran in five phases on branch
+  `feature/universal-assessment-reassessment-v1` (head `ad89aae`):
+  Phase 1 verified the foundation (182/182); Phase 2 wired the
+  Assessments UI to the server workflow (219/219); Phase 3 connected
+  + verified the Edge Function without deploying it, incl. the
+  `GET …/battery` route and a real defect fix (`loadData` dropped
+  capped/attempts/unit from history — 246/246); Phase 4 ran full
+  synthetic workflow testing, closing the one genuine gap
+  (interruption + retry composed end to end — 249/249); Phase 5
+  produced the release package. Full record:
+  `docs/RELEASE_READINESS.md`; completion addenda in
+  `docs/ASSESSMENT_INTEGRATION_COMPLETION.md`; deploy steps in
+  `docs/EDGE_FUNCTION_DEPLOY_STEPS.md`; test report in
+  `docs/PHASE4_TEST_REPORT.md`.
+- **Verdict: code-complete and verified — NOT yet ready for
+  production.** The release is blocked only on owner approvals and
+  deploy-time checks, not on code or tests. Exact sequence in
+  `docs/RELEASE_READINESS.md` §7: (1) decide §14 (stale Assessments
+  copy) — still open; (2) first manual browser pass; (3) approve +
+  merge PR #2, then (4) PR #3; (5) approve + deploy the Edge
+  Function per the deploy doc; (6) approve + deploy the production
+  application; (7) production smoke test with synthetic data +
+  cleanup to 26/15/72/0.
+- **Ready to merge:** PR #2 — YES (pending approval). PR #3 — YES on
+  code and tests; GitHub mergeability reads UNKNOWN only because its
+  base (the foundation branch) is itself unmerged — confirm after
+  PR #2 merges. No merge performed.
+- **Decisions needed from Marcus:** merge order (PR #2 then PR #3);
+  §14 copy refresh; Edge Function deploy; production deploy. Each
+  is its own approval; one approval covers one step only.
