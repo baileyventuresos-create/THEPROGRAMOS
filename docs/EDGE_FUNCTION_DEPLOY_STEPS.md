@@ -20,7 +20,7 @@ this branch, not on `main`).
 |---|---|---|
 | 1 | Migration 004 applied + verified | 26 tables / 15 definitions / 72 policies / 0 rows — `server/live-checks/004/RESULTS.md` |
 | 2 | Migration 005 applied + verified | Same counts; `modified` / `capped` columns present; age CHECK `age_years >= 5`; behavioral re-check 6/6 PASS — `server/live-checks/005/RESULTS.md` |
-| 3 | Full regression suite green | `npm test` — 249/249 (2026-11-14, incl. 27 Edge Function tests in `server/tests/edge-function.test.js` + 3 interruption tests in `server/tests/phase4-interruption.test.js`) |
+| 3 | Full regression suite green | `npm test` — 250/250 (2026-11-14, incl. 27 Edge Function tests in `server/tests/edge-function.test.js` + 3 interruption tests in `server/tests/phase4-interruption.test.js` + 1 walkthrough regression test in `server/tests/assessment-ui.test.js`) |
 | 4 | Typecheck clean | `tsc --noEmit --strict` on the five `.ts` files (Deno + `esm.sh` stubbed; stubs live only in the check setup, not the repo) |
 | 5 | Workflow bundle generates | `node build.mjs` in `supabase/functions/assessment-api` writes `vendor/workflow.bundle.mjs` (84.3 kB; factories + battery exports) |
 | 6 | `verify_jwt = true` | `supabase/config.toml` (`[functions.assessment-api]`) — platform verifies the JWT before the function runs |

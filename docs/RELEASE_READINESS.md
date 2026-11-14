@@ -2,7 +2,8 @@
 
 **Date:** 2026-11-14
 **Mission:** COMPLETE ASSESSMENT INTEGRATION & RELEASE READINESS (Marcus, 2026-11-13)
-**Branch:** `feature/universal-assessment-reassessment-v1` (head `ad89aae` at time of writing)
++ FINAL ASSESSMENTS CLEANUP & RELEASE (Marcus, 2026-11-14)
+**Branch:** `feature/universal-assessment-reassessment-v1` (head `5fe4281` at time of writing; docs commits follow)
 **Status: CODE-COMPLETE AND VERIFIED — NOT YET READY FOR PRODUCTION.**
 Production readiness is blocked only on owner approvals and the deploy-time
 checks listed in §6. Nothing in the code or tests blocks the release.
@@ -54,7 +55,39 @@ checks listed in §6. Nothing in the code or tests blocks the release.
   +1 capped-display assertion. No failures, new or pre-existing.
 - **Phase 5 — This package.**
 
-**Final test state: 249 tests, 249 pass, 0 fail** (`npm test`).
+## 2b. What the cleanup mission completed (2026-11-14, Marcus decision §14)
+
+- **Removed the obsolete Assessments prototype content** — the first
+  authorized edit to `THE PROGRAM OS.html`: `vAssess()` no longer
+  renders the "REQUIRES PROGRAM VALIDATION" head, the "not being
+  collected today" lede, the explainer cards, the TESTS draft-protocol
+  cards, the "Due for testing" demo table, or the "Decisions needed"
+  list. `vAssess()` returns only the page head; the live section is
+  the only assessment experience. The athlete-profile progress-tab
+  note was reworded to point at the official Assessments section.
+  The preservation-snapshot hash was updated in the separate reviewed
+  commit `f90dd11` (old `bdee15bc…`, new `74aba9d7…`). Decision §14
+  is CLOSED (`docs/MORNING_DECISIONS.md` §14).
+- **Real-browser walkthrough — 22/22 PASS** (Playwright + Chromium
+  1255, dev server on localhost, synthetic data): all 10 mission
+  steps on desktop, obsolete-content check, mobile layout (390×844,
+  0px overflow). Full record + screenshots:
+  `docs/browser-walkthrough-2026-11-14/RESULTS.md`.
+- **Two defects found and fixed by the walkthrough** (commit
+  `5fe4281`): (1) the dev "View as" role buttons carried
+  `data-role="coach"`, which the prototype's click handler treats as
+  its mode switch — clicking a role button navigated away from the
+  Assessments view (automated tests never saw it); fixed by renaming
+  to `data-aui-role`, with a regression test. (2) Mobile header
+  overflow (dev-only): the panel header's non-wrapping flex row
+  forced the page to 758px on a 390px phone; fixed with
+  `flex-wrap:wrap`. +1 test (regression).
+- The dashboard "Due for testing" KPI + exceptions entry still read
+  demo data ("battery not validated") — wiring the card to live
+  reassessment data was judged not minimal; it is a follow-up item,
+  not a release blocker.
+
+**Final test state: 250 tests, 250 pass, 0 fail** (`npm test`).
 `tsc --noEmit --strict` clean on all five Edge Function `.ts` files
 (Phase 3, stubs in /tmp only). Typecheck/lint/build scripts do not
 exist in the repo (n/a — confirmed, not skipped).
@@ -63,7 +96,7 @@ exist in the repo (n/a — confirmed, not skipped).
 
 | Item | State |
 |---|---|
-| Branch | `feature/universal-assessment-reassessment-v1`, head `ad89aae`, pushed, tree clean |
+| Branch | `feature/universal-assessment-reassessment-v1`, head `5fe4281` (+ docs commits, see `git log`), pushed, tree clean |
 | `main` | Untouched at `dc5d42d` |
 | PR #2 (foundation) | OPEN, draft, base `main`, mergeable: **MERGEABLE**, merge state: CLEAN |
 | PR #3 (assessment) | OPEN, draft, base = foundation branch, mergeable: **UNKNOWN** (GitHub-side: uncomputable while its base is itself unmerged — not a local conflict; local merge-tree is clean) |
@@ -76,8 +109,16 @@ performed; merging either PR needs Marcus's explicit approval.
 
 ## 4. End-to-end test results
 
-- Full regression: **249/249 PASS** (182 at Phase 1 → 219 Phase 2 →
-  246 Phase 3 → 249 Phase 4). No failures, new or pre-existing.
+- Full regression: **250/250 PASS** (182 at Phase 1 → 219 Phase 2 →
+  246 Phase 3 → 249 Phase 4 → 250 after the cleanup walkthrough
+  regression test). No failures, new or pre-existing.
+- Real-browser walkthrough (2026-11-14): **22/22 PASS** in Chromium
+  against the dev server (synthetic data): coach login + roster,
+  start, all eight protocols, save/resume, complete + baseline +28d,
+  history + PBs, 28-day buckets, reassessment + comparison, parent
+  and athlete access, override gate + plan finalization; desktop and
+  mobile (0px overflow). Record:
+  `docs/browser-walkthrough-2026-11-14/RESULTS.md`.
 - Scenario coverage (all executable, synthetic data, isolated env):
   youth 12 + adult 48 full assessments, all 8 protocols;
   incomplete → save → resume → complete, baseline, +28d;
@@ -107,8 +148,13 @@ test, §4 rollback, §5 what the deploy does not do).
 the deploy machine; stop if either fails); the deployed function
 against live Supabase (needs deploy approval + real coach-JWT smoke
 test, scripted in the deploy doc); RLS against the function (fake
-client does not enforce RLS — live RLS verified separately in §5);
-real-browser render (no headless browser here).
+client does not enforce RLS — live RLS verified separately in §5).
+Real-browser render is now VERIFIED (22/22 walkthrough in Chromium
+against the dev server — the deployed Edge Function path, with a real
+coach JWT, is still covered only by the deploy-time smoke test).
+Production sign-in flow (Supabase Auth) was not exercised in the
+walkthrough (dev uses the "View as" switcher) — it is covered by the
+production smoke test in §7.
 
 ## 6. Remaining blockers — exact list
 
@@ -116,23 +162,21 @@ Production use is blocked on these, in order. None is a code defect.
 
 1. **Marcus approves the merge order** — PR #2 (foundation) then
    PR #3 (assessment). Deployment is a separate decision after that.
-2. **Decision §14 (stale Assessments copy)** — the live assessment
-   section now sits above prototype copy saying the numbers "are not
-   being collected today" with a "~12 weeks" interval. Refresh the
-   copy (and wire the dashboard due-card) before any real use.
-   The copy refresh is a minimal, additive UI update — no redesign.
-3. **First manual browser pass** — over the dev-server URL, before
-   real use (no headless browser in this environment; UI verified
-   via stubbed globals + HTTP only).
-4. **Marcus approves the Edge Function deploy** — then run the deploy
+2. **Marcus approves the Edge Function deploy** — then run the deploy
    doc end to end: `deno check`, `supabase functions serve`, deploy,
    live smoke test (synthetic data, cleanup back to 0 rows).
-5. **Marcus approves the production application deploy** — separate
+3. **Marcus approves the production application deploy** — separate
    decision; no production deploy is part of this package.
-6. **Battery field validation (open since §8)** — the GAA v1 protocol
+4. **Battery field validation (open since §8)** — the GAA v1 protocol
    is written but unvalidated in the field; do not present results
    to parents as more than coach-recorded measurements until
    validated.
+
+Done since the last version of this package: decision §14 (stale
+Assessments copy) — decided and implemented in the cleanup mission;
+the first real-browser pass — 22/22 in Chromium against the dev
+server. Follow-up item, not a blocker: wiring the dashboard "Due for
+testing" card to live reassessment data (still demo data).
 
 Minor nits recorded, not blocking: migration 005's SQL file header
 still says "NOT APPLIED" (stale file text; it was applied via the
@@ -147,12 +191,10 @@ remain open owner items.
 Each step needs its own explicit approval from Marcus. One approval
 covers one step only.
 
-1. **Decide §14** (Assessments copy refresh + dashboard due-card
-   wiring) — owner decision; implement as a minimal additive change
-   on the assessment branch, re-run `npm test`, push.
-2. **Manual browser pass** — dev server (`npm run dev`), walk the
-   11-step coach workflow + athlete view in a real browser with
-   synthetic data; record the result.
+1. **§14 decided + implemented** (cleanup mission 2026-11-14 —
+   obsolete Assessments content removed; decision closed).
+2. **Real-browser pass DONE** — 22/22 in Chromium against the dev
+   server (record: `docs/browser-walkthrough-2026-11-14/RESULTS.md`).
 3. **Approve + merge PR #2** (foundation) into `main`. Verify the
    merge is clean and `main` builds/passes.
 4. **Rebase/merge-check PR #3** onto the new `main`; confirm GitHub

@@ -495,6 +495,28 @@ athlete system; age is an athlete attribute, not a division.
   card to live reassessment data was judged not minimal and was
   left as a follow-up item — recorded in the release package, not
   silently dropped.
-- **Remaining for this mission:** real-browser walkthrough (Task 2),
-  final regression verification (Task 3), and the release package
-  update (Task 4).
+- **Remaining for this mission:** final regression verification
+  (Task 3) and the release package update (Task 4). Real-browser
+  walkthrough (Task 2) is DONE — see below.
+- **Real-browser walkthrough (Task 2) — 22/22 PASS (2026-11-14):**
+  Playwright + Chromium 1255 (local dev tooling under `/tmp/pw-setup`,
+  not committed), dev server on localhost, synthetic data only. All
+  10 mission steps verified in a real browser on desktop, plus the
+  obsolete-content check and mobile layout (390×844, 0px overflow on
+  roster and run form). Full record + screenshots:
+  `docs/browser-walkthrough-2026-11-14/RESULTS.md`.
+- **Defects found and fixed by the walkthrough (commit `5fe4281`):**
+  (1) the dev "View as" role buttons carried `data-role="coach"`,
+  which the prototype's click handler treats as its mode switch —
+  clicking a role button navigated away from the Assessments view
+  into the prototype's Coach Mode landing page (the automated tests
+  never saw it; they bypass the prototype's listener). Fixed by
+  renaming the attribute to `data-aui-role`, with a regression test.
+  (2) Mobile header overflow (dev-only): the panel header's
+  non-wrapping flex row forced the page to 758px on a 390px phone;
+  fixed with `flex-wrap:wrap` on the panel header actions.
+  Production mobile was already fine without the dev switcher.
+- **Environment note:** the prototype loads Google Fonts; the
+  sandbox egress proxy blocks it (`ERR_TUNNEL_CONNECTION_FAILED`).
+  Environmental only — no same-origin request failed, no page
+  errors, system fonts render.
