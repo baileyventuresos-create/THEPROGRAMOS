@@ -469,3 +469,32 @@ athlete system; age is an athlete attribute, not a division.
 - **Boundaries kept:** no merge, no Edge Function deploy, no
   production deploy, no production env/migration/data changes,
   nothing on Neon/Taskmill/MARVIN, synthetic data only.
+
+## Addendum — 2026-11-14: Final Assessments cleanup (Marcus decision §14)
+- **What changed:** the obsolete Assessments prototype content was
+  removed from `THE PROGRAM OS.html` — commit `b3dab6d`: `vAssess()`
+  no longer renders the "REQUIRES PROGRAM VALIDATION" head, the
+  "not being collected today" lede, the three explainer cards, the
+  TESTS draft-protocol cards, the "Due for testing" demo table, or
+  the "Decisions needed" list. `vAssess()` now returns only the page
+  head for the official Universal Athletic Assessment; the live
+  section prepended at runtime by `AssessmentUI.install()` is the
+  only assessment experience. The athlete-profile progress-tab note
+  was reworded to point at the official Assessments section, and the
+  UI module's offline note no longer references a draft battery.
+  The `TESTS` const and athlete-profile demo metrics are untouched
+  (still used by `vAthlete`). This was the first authorized edit to
+  `THE PROGRAM OS.html`.
+- **Snapshot:** the preservation hash for `THE PROGRAM OS.html` was
+  updated in the separate reviewed commit `f90dd11` (old
+  `bdee15bc…`, new `74aba9d7…`; no test logic changed, no test
+  weakened). The snapshot failure between the two commits was the
+  only failure (248/249); the suite is 249/249 after the update.
+- **Dashboard card:** the "Due for testing" KPI and its exceptions
+  entry still read demo data ("battery not validated"). Wiring the
+  card to live reassessment data was judged not minimal and was
+  left as a follow-up item — recorded in the release package, not
+  silently dropped.
+- **Remaining for this mission:** real-browser walkthrough (Task 2),
+  final regression verification (Task 3), and the release package
+  update (Task 4).

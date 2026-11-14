@@ -22,14 +22,19 @@ any server logic:
 | `server/tests/dev-server.test.js` (new, 10 tests) | Dev server over real HTTP: static serving, battery route, role-scoped rosters, seeded buckets, full workflow, idempotent replay, deferral/exclusion, plan gate + override, forbidden access, malformed input, traversal rejection. |
 | `package.json` | Adds `npm test` and `npm run dev` scripts. No new dependencies. |
 
-**Deliberately NOT changed:** `THE PROGRAM OS.html` is byte-identical
-(its hash in `tests/ui-preservation.snapshot.json` is unchanged).
-The stale Assessments-view copy ("nothing here is approved, and
-these numbers are not being collected today", "~12 weeks") is NOT
-refreshed — that is still owner decision §14 in
-`docs/MORNING_DECISIONS.md`. The dashboard "due for testing" card is
-NOT rewired — same decision. The stale `KNOWN GAP` comment in the
-Edge Function store is NOT touched — Phase 3 cleanup.
+**Changed 2026-11-14 under Marcus's decision §14 (cleanup mission):**
+`THE PROGRAM OS.html` was edited for the first time — the obsolete
+Assessments prototype content was removed from `vAssess()` (battery
+cards, due table, decisions list, stale lede). `vAssess()` now
+returns only the page head; the live section is the whole
+Assessments experience. The athlete-profile progress-tab note was
+reworded to point at the official Assessments section. The
+preservation-snapshot hash for `THE PROGRAM OS.html` was updated in
+the reviewed commit `f90dd11` (old `bdee15bc…`, new `74aba9d7…`).
+The dashboard "due for testing" card is NOT rewired — wiring it to
+live reassessment data is not a minimal change; it is recorded as a
+remaining item in the release package. The stale `KNOWN GAP` comment
+in the Edge Function store was resolved in Phase 3.
 
 ## 2. How the wiring works
 
@@ -38,8 +43,9 @@ then the two assessment scripts, then calls `boot()`. The UI module's
 `install()` runs before `boot()` and wraps two prototype functions:
 
 - `window.vAssess` — the live section is PREPENDED to the
-  Assessments view; the draft battery cards and "Decisions needed"
-  below it are unchanged.
+  Assessments view; since the 2026-11-14 §14 cleanup the prototype
+  battery cards and "Decisions needed" below it no longer exist, so
+  the live section is the whole Assessments experience.
 - `window.vAthlete` — a compact live section is APPENDED to an
   athlete profile, but only when the athlete is in the live roster
   (matched by id). Demo athletes not in the live roster see their
@@ -56,9 +62,9 @@ prototype's handler ignores them) and the module adds one document
 click listener. Form values are read at action time; every save goes
 through the server (`recordAttempts` is the draft save).
 
-When the assessment service is unreachable, the prototype renders
-exactly as before plus a short "not connected" note in the live
-section. The app never breaks for lack of a server.
+When the assessment service is unreachable, the Assessments view
+shows a short "not connected" note in the live section and nothing
+else. The app never breaks for lack of a server.
 
 ## 3. The 11-step workflow in the UI
 

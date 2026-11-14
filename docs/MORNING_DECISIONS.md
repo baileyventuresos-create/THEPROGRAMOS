@@ -274,6 +274,20 @@ continued around every item; nothing is stalled except the item itself.
   Note the live section now sits above copy saying the numbers "are
   not being collected today", so the copy refresh should be decided
   before any real use.
+- **Status 2026-11-14 — DECIDED AND IMPLEMENTED (cleanup mission):**
+  Marcus approved eliminating the old Assessments prototype content.
+  The obsolete section was removed from `THE PROGRAM OS.html`
+  (`vAssess()` now returns only the page head; the live section is
+  the only assessment experience) in commit `b3dab6d`, and the
+  preservation-snapshot hash was updated in the reviewed commit
+  `f90dd11` (old `bdee15bc…`, new `74aba9d7…`). The athlete-profile
+  progress-tab note was reworded to point at the official
+  Assessments section. Full suite 249/249 after the cleanup.
+  Remaining from this decision: the dashboard "due for testing" KPI
+  and its exceptions entry still read demo data ("battery not
+  validated") — wiring the card to live reassessment data was judged
+  not minimal and was left as a follow-up item, recorded in the
+  release package. Decision §14 is otherwise CLOSED.
 
 ## 15. Unified athlete system — migration 005 (new, Marcus correction 2026-11-13)
 
