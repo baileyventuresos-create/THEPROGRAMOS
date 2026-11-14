@@ -243,6 +243,7 @@ test('renderHistory shows baseline, PBs, comparisons, sessions, and plan control
       history: [{ sessionId: 's1', recordedAt: '2027-01-10T12:00:00Z', results: [
         { assessmentId: '10yd-sprint', result: 2.3, unit: 'sec', modified: false, capped: false },
         { assessmentId: 'push-ups', result: 12, unit: 'reps', modified: true, capped: false },
+        { assessmentId: 'side-plank', result: 120, unit: 'sec', modified: false, capped: true },
       ] }],
       personalBests: { '10yd-sprint': { value: 2.3, unit: 'sec' } },
       progress: { tests: { '10yd-sprint': {
@@ -262,6 +263,7 @@ test('renderHistory shows baseline, PBs, comparisons, sessions, and plan control
   assert.ok(html.includes('2.30 sec ★') || html.includes('2.30 sec'), 'current best is shown');
   assert.ok(html.includes('growth and maturation'), 'youth caveat is shown');
   assert.ok(html.includes('(modified)'), 'modified flag is shown on the session');
+  assert.ok(html.includes('120.00 sec (capped)'), 'capped result is shown with its unit (bed566d display path)');
   assert.ok(html.includes('Plan is ready to finalize'));
   assert.ok(html.includes('data-aui="plan-finalize"'));
 });
