@@ -62,6 +62,20 @@ prototype's handler ignores them) and the module adds one document
 click listener. Form values are read at action time; every save goes
 through the server (`recordAttempts` is the draft save).
 
+Collision found 2026-11-14 in the real-browser walkthrough (the
+automated tests never saw it — they call `onClick`/`switchRole`
+directly, bypassing the prototype's listener): the "View as" role
+buttons originally carried `data-role="coach"` etc., and the
+prototype's own click handler treats ANY `data-role` as its
+Director/Coach/Athlete mode switch (`S.role = ds.role; render()`),
+so clicking a role button navigated the prototype away from the
+Assessments view into its Coach Mode landing page. Fixed by
+renaming the attribute to `data-aui-role` (renderer + click
+handler); regression test in `server/tests/assessment-ui.test.js`.
+Rule: the UI module must never emit a `data-*` attribute the
+prototype's handler acts on (`data-role`, `data-go`, `data-ath`,
+`data-session`, …) — only `data-aui*` attributes are safe.
+
 When the assessment service is unreachable, the Assessments view
 shows a short "not connected" note in the live section and nothing
 else. The app never breaks for lack of a server.

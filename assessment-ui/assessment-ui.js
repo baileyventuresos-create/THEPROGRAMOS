@@ -269,8 +269,12 @@
   }
 
   function panel(h, title, rightHtml, bodyHtml) {
+    // The header actions (.r) must wrap: the prototype's .ph/.r are
+    // non-wrapping flex, so the six dev "View as" buttons forced the
+    // panel (and the page) to 758px on a 390px phone. With wrap, the
+    // panel fits and the roster table scrolls inside .tbl-wrap.
     return '<section class="panel"><div class="ph"><h3>' + h.esc(title) + '</h3>'
-      + (rightHtml ? '<div class="r">' + rightHtml + '</div>' : '') + '</div>'
+      + (rightHtml ? '<div class="r" style="flex-wrap:wrap">' + rightHtml + '</div>' : '') + '</div>'
       + '<div class="pb">' + bodyHtml + '</div></section>';
   }
 
@@ -540,7 +544,7 @@
     if (h.devRoles) {
       right += h.devRoles.map(function (r) {
         const active = state.role && state.role.user === r.user;
-        return '<button class="btn sm' + (active ? ' solid' : '') + '" data-aui="role" data-role="' + h.esc(r.role)
+        return '<button class="btn sm' + (active ? ' solid' : '') + '" data-aui="role" data-aui-role="' + h.esc(r.role)
           + '" data-user="' + h.esc(r.user) + '"' + (r.athleteId ? ' data-athlete="' + h.esc(r.athleteId) + '"' : '')
           + '>' + h.esc(r.label) + '</button>';
       }).join(' ');
@@ -898,7 +902,7 @@
         'plan-finalize': function () { return finalizePlan(planId); },
         'role': function () {
           return switchRole({
-            role: t.getAttribute('data-role'), user: t.getAttribute('data-user'),
+            role: t.getAttribute('data-aui-role'), user: t.getAttribute('data-user'),
             athleteId: athleteId || null,
             label: (t.textContent || '').trim(),
           });

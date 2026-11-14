@@ -391,6 +391,38 @@ test('controller: switching to the parent role narrows the roster and hides reco
   assert.ok(html.includes('data-aui="history"'), 'history is still available');
 });
 
+test('regression: role buttons must not carry data-role (prototype mode-switch collision)', async () => {
+  // Found 2026-11-14 in the real-browser walkthrough: the "View as"
+  // buttons originally carried data-role="coach", and the prototype's
+  // own click handler treats ANY data-role as its Director/Coach/
+  // Athlete mode switch (S.role = ds.role; render()), so clicking a
+  // role button navigated the prototype away from the Assessments
+  // view. The attribute is now data-aui-role.
+  const doc = makeDoc();
+  const { root } = makeRoot(doc);
+  const client = makeStubClient();
+  const ui = UI.createAssessmentUI({ root, doc, client });
+  ui.install();
+  await ui.refresh();
+  const html = ui.renderLiveSection();
+  assert.ok(html.includes('data-aui-role="coach"'), 'role buttons carry data-aui-role');
+  assert.ok(!html.includes('data-role="'), 'no data-role attribute in the live section');
+  assert.ok(html.includes('<div class="r" style="flex-wrap:wrap">'), 'panel header actions wrap on narrow screens');
+  // Clicking a role button through onClick switches the dev role.
+  client.setAuth({ authUserId: 'dev-coach-kayla', role: 'coach' });
+  const el = {
+    getAttribute(name) {
+      return { 'data-aui': 'role', 'data-aui-role': 'coach', 'data-user': 'dev-coach-kayla' }[name] || null;
+    },
+    closest() { return el; },
+    textContent: 'Coach Kayla (YAK)',
+  };
+  ui.onClick({ target: el });
+  for (let i = 0; i < 50 && ui.state.roster.length !== 4; i++) await new Promise((r) => setTimeout(r, 10));
+  assert.equal(ui.state.role.user, 'dev-coach-kayla');
+  assert.equal(ui.state.roster.length, 4, 'Kayla sees only her athletes');
+});
+
 test('controller: disconnected service leaves the prototype output plus a note', async () => {
   const doc = makeDoc();
   const { root } = makeRoot(doc);
