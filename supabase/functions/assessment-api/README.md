@@ -20,7 +20,9 @@ Methods (same role rules and error codes as `server/assessment-api.js`):
 `listAthletes`, `startAssessment`, `recordAttempts`, `getDraft`,
 `discardDraft`, `completeAssessment`, `athleteAssessmentView`,
 `coachDashboard`, `recordDeferral`, `planReadiness`, `createPlan`,
-`finalizePlan`, `advisoryPriorities`.
+`finalizePlan`, `advisoryPriorities` — plus the read-only protocol
+route `GET …/battery` (same shape as the dev server's route; see
+§2 and `workflow.ts` `loadBattery`).
 
 ## Files
 
@@ -71,45 +73,44 @@ node build.mjs          # writes vendor/workflow.bundle.mjs (generated, not comm
 1. **Workflow bundle is generated, not committed.** The function
    fails loudly (`WORKFLOW_BUNDLE_MISSING`) until `build.mjs` has
    run. The bundle must be generated and smoke-tested (see §5)
-   before any deploy.
-2. **`modified` / `capped` flags have no Postgres columns — until
-   migration 005 is applied.**
-   `server/assessment-store.js` records `modified` and `capped` on
-   every assessment result, and `athleteAssessmentView` reads them
-   back — but migration 002's `assessment_results` has neither
-   column. `store.ts` maps them to `modified` / `capped` columns so
-   the adapter works unchanged once they exist, but until migration
-   005 (`server/migrations/005_unified_athlete_age_and_result_flags.sql`,
-   written 2026-11-13, NOT applied) adds those two BOOLEAN columns,
-   any insert/select touching `assessment_results` fails at
-   PostgREST. Do not "fix" this by stuffing the flags into the
-   `attempts` JSONB — attempts must stay the preserved numeric
-   attempts.
-3. **Adult athletes cannot be stored yet — until migration 005 is
-   applied.** `athletes.age_years`
-   is `CHECK (age_years BETWEEN 5 AND 19)` in migration 001, so an
-   adult athlete (e.g. the 48-year-old validation case) cannot be
-   an `athletes` row today. Migration 005 removes the 19 maximum
-   (floor of 5 kept as a data-sanity guard) under the unified
-   athlete system — one system for all ages, no divisions. The
-   directory reports `age_years` as-is; nothing
-   here works around the CHECK.
+   before any deploy. `supabase/functions/assessment-api/vendor/`
+   is git-ignored so the generated artifact can never be committed
+   by accident.
+2. **~~`modified` / `capped` flags have no Postgres columns — until
+   migration 005 is applied.~~ RESOLVED 2026-11-13.** Migration 005
+   was applied to TheProgramOS and verified (26 tables / 15
+   definitions / 72 policies / 0 rows; behavioral re-check 6/6 PASS
+   — see `server/live-checks/005/RESULTS.md`).
+   `assessment_results` now has `modified` / `capped` BOOLEAN NOT
+   NULL DEFAULT FALSE, and `store.ts` maps them as written. The
+   mapping is covered by tests (`server/tests/edge-function.test.js`).
+   Do not "fix" this by stuffing the flags into the `attempts`
+   JSONB — attempts must stay the preserved numeric attempts.
+3. **~~Adult athletes cannot be stored yet — until migration 005 is
+   applied.~~ RESOLVED 2026-11-13.** Migration 005 removes the
+   19-year-old maximum (`athletes.age_years` CHECK is now
+   `age_years >= 5`, floor kept as a data-sanity guard) under the
+   unified athlete system — one system for all ages, no divisions.
+   The directory reports `age_years` as-is; nothing here works
+   around the CHECK, because there is no maximum left to work
+   around. Verified live (48-year-old and 12-year-old in the same
+   table — see `server/live-checks/005/RESULTS.md`).
 4. **IDs are UUIDs in Postgres, not Node `uid()` strings.** The
    Node stores generate ids like `asess_…`; Postgres id columns are
    UUID. `store.ts` assigns a fresh `crypto.randomUUID()` onto each
    row in place before inserting, so the caller's references stay
    consistent. No behaviour change — the workflow never exposes
    the id format to callers.
-5. **Migrations 004 and 005 must be applied first.** The function reads and
-   writes `assessment_schedules`, `assessment_deferrals`,
-   `assessment_drafts`, `development_plans`, and the
-   `idempotency_key` column, all of which 004 creates — and the
-   `modified` / `capped` result columns and the relaxed athlete age
-   CHECK, which 005 provides. Do not
-   deploy before 004 and 005 are applied and verified (see
-   `docs/MIGRATION_EXECUTION_PLAN.md`).
+5. **~~Migrations 004 and 005 must be applied first.~~ SATISFIED
+   2026-11-13.** Both are applied and verified (004: 26 tables /
+   15 definitions / 72 policies; 005: same counts, `modified` /
+   `capped` columns present, age CHECK relaxed — see
+   `server/live-checks/004/RESULTS.md` and
+   `server/live-checks/005/RESULTS.md`). The deploy prerequisites
+   in `docs/MIGRATION_EXECUTION_PLAN.md` are met; deploy itself is
+   still a separate owner approval.
 
-## 5. Verification status (2026-11-13)
+## 5. Verification status (2026-11-13 scaffold; 2026-11-14 Phase 3)
 
 - Scaffold files written on branch
   `feature/universal-assessment-reassessment-v1`; **not deployed**.
@@ -117,7 +118,8 @@ node build.mjs          # writes vendor/workflow.bundle.mjs (generated, not comm
   `vendor/workflow.bundle.mjs` (84.3 kB, both factories exported);
   the bundled workflow runs in Node — `startAssessment` and
   `athleteAssessmentView` behave as in the tested modules. The
-  bundle is a generated artifact and is NOT committed.
+  bundle is a generated artifact and is NOT committed
+  (`vendor/` is git-ignored).
 - **Dispatch/auth layer verified:** `api.ts` smoke-tested locally
   against a stub workflow — dispatch, role rules (`FORBIDDEN`),
   auth rules (`UNAUTHENTICATED`), and parameter checks
@@ -128,9 +130,31 @@ node build.mjs          # writes vendor/workflow.bundle.mjs (generated, not comm
 - **Typecheck:** `tsc --noEmit --strict` passes on all five `.ts`
   files (Deno globals and the `esm.sh` supabase-js import stubbed,
   as both exist only in the Edge runtime).
+- **Phase 3 (2026-11-14) — battery route + full verification,
+  `server/tests/edge-function.test.js` (27 tests, all passing;
+  full suite 246/246):** `GET …/battery` serves the real GAA
+  protocol (8 tests, `gaa-v1`, 28-day retest) behind the same JWT
+  verification as POST, same shape as the dev server's route; the
+  `ALLOWED` role table is identical to `server/assessment-api.js`;
+  unauthenticated / out-of-cohort / forged-actor cases are refused
+  with the same codes; duplicate completions replay idempotently
+  (one session); `modified` / `capped` survive the PostgREST
+  round-trip end to end through the real HTTP handler; Smart Draft
+  is advisory-only (`advisoryOnly: true, autoRewrite: false`) and
+  writes nothing; the client is built with the anon key only (no
+  service-role key anywhere in the function sources); missing or
+  stale bundles fail loudly with `WORKFLOW_BUNDLE_MISSING`.
+  **Defect found and fixed in verification:** the shared workflow's
+  `loadData()` dropped `capped` / `attempts` / `unit`, so
+  `athleteAssessmentView` history never showed "(capped)" and
+  values lost their unit — fixed in
+  `server/assessment-workflow.js` (additive, covered by the new
+  tests). `tsc --noEmit --strict` re-verified clean on all five
+  `.ts` files after the changes.
 - **NOT run:** `deno check` / `supabase functions serve` (no Deno
   or Supabase CLI in this environment) — run them before any
-  deploy. No live Supabase writes were made by this scaffold. No
+  deploy, per `docs/EDGE_FUNCTION_DEPLOY_STEPS.md`. No live
+  Supabase writes were made by this scaffold or by Phase 3. No
   secrets are stored in this directory.
 
 ## 6. Deploy (later — separate approval, do NOT run now)

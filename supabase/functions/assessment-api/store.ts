@@ -23,19 +23,18 @@
 //      Session uses sessionRow.id for its results) stay consistent.
 //      The returned row carries the UUID.
 //
-// KNOWN GAP — modified/capped flags (see README.md §4): migration
-// 002's assessment_results has NO modified/capped columns, but the
-// workflow records them on every result row (server/assessment-
-// store.js) and reads them back in athleteAssessmentView. This
-// adapter maps them to `modified` / `capped` columns, which DO NOT
-// EXIST yet — inserts/selects touching assessment_results will fail
-// at PostgREST until migration 005
-// (server/migrations/005_unified_athlete_age_and_result_flags.sql,
-// written 2026-11-13, NOT applied) adds those two BOOLEAN columns.
-// The mapping is written so it works unchanged once the columns
-// exist; nothing is silently dropped.
-// Do NOT "fix" this by stuffing the flags into the attempts JSONB —
-// attempts must stay the preserved numeric attempts.
+// RESOLVED (Phase 3, 2026-11-14) — modified/capped flags: migration
+// 005 (server/migrations/005_unified_athlete_age_and_result_flags.sql)
+// was APPLIED to the live project TheProgramOS on 2026-11-13 and
+// verified (26 tables / 15 definitions / 72 policies / 0 rows;
+// behavioral re-check 6/6 PASS — see
+// server/live-checks/005/RESULTS.md). `assessment_results` now has
+// `modified` / `capped` BOOLEAN NOT NULL DEFAULT FALSE, so this
+// adapter's mapping to those columns works as written: the workflow
+// records the flags on every result row (server/assessment-store.js)
+// and reads them back in athleteAssessmentView, and nothing is
+// silently dropped. Do NOT "fix" this by stuffing the flags into the
+// attempts JSONB — attempts must stay the preserved numeric attempts.
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -83,7 +82,8 @@ function resultToDb(r: Row): Row {
     attempts: r.attempts, result: r.result ?? null, unit: r.unit,
     direction: r.direction, protocol_version: r.protocolVersion,
     recorded_at: r.recordedAt,
-    // GAP §4: these columns do not exist until a 005 adds them.
+    // modified / capped: BOOLEAN NOT NULL DEFAULT FALSE since
+    // migration 005 (applied 2026-11-13; see the header note above).
     modified: r.modified ?? false, capped: r.capped ?? false,
   });
 }

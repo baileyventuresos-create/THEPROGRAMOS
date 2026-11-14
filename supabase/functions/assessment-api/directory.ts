@@ -30,15 +30,17 @@
 //                  athletes.app_user_id (the athlete half of
 //                  public.is_my_athlete()).
 //
-// KNOWN GAP — adult athletes: athletes.age_years is CHECK 5–19 in
-// migration 001, so an adult athlete (e.g. the 48-year-old validation
-// case) cannot be stored as an athletes row today. The directory
-// therefore reports age_years as-is; supporting adult athletes in
-// the live database needs migration 005
-// (server/migrations/005_unified_athlete_age_and_result_flags.sql,
-// written 2026-11-13, NOT applied), which removes the 19 maximum
-// (floor of 5 kept). See README.md §4. This is a gap to decide,
-// not something this scaffold silently works around.
+// RESOLVED (Phase 3, 2026-11-14) — adult athletes: migration 005
+// (server/migrations/005_unified_athlete_age_and_result_flags.sql)
+// was APPLIED to the live project TheProgramOS on 2026-11-13 and
+// verified (see server/live-checks/005/RESULTS.md). It removes the
+// 19-year-old maximum from athletes.age_years (CHECK is now
+// age_years >= 5, floor kept as a sanity guard), so an adult athlete
+// (e.g. the 48-year-old validation case) is stored as an athletes
+// row like any other, under the unified athlete system — no
+// divisions. The directory reports age_years as-is, which is correct
+// for all ages; nothing here works around the CHECK, because there
+// is no maximum left to work around.
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import type { AuthContext, Role } from "./api.ts";

@@ -43,17 +43,29 @@ interface WorkflowBundle {
     athletes: unknown[];
     coachAuth: Record<string, string>;
   }) => unknown;
+  // GAA battery protocol (server/assessment-battery.js, re-exported
+  // by entry.mjs). Present only in bundles generated after the
+  // battery route was added (Phase 3); a stale bundle is reported
+  // as missing so the caller regenerates it instead of serving a
+  // half-protocol.
+  GAA_TESTS?: unknown;
+  PROTOCOL_VERSION?: unknown;
+  BATTERY_ID?: unknown;
+  RETEST_DAYS?: unknown;
 }
 
-export async function loadWorkflow(
-  stores: Stores,
-  directory: DirectoryRow,
-): Promise<Record<string, (auth: AuthContext, params: Record<string, unknown>) => unknown>> {
-  let bundle: WorkflowBundle;
+export interface BatteryPayload {
+  battery: string;
+  protocolVersion: string;
+  retestDays: number;
+  tests: unknown[];
+}
+
+async function loadBundle(): Promise<WorkflowBundle> {
   try {
     // @ts-ignore: the bundle is generated JS with no type declarations
     // (see build.mjs); its shape is checked at runtime below.
-    bundle = (await import("./vendor/workflow.bundle.mjs")) as WorkflowBundle;
+    return (await import("./vendor/workflow.bundle.mjs")) as WorkflowBundle;
   } catch {
     throw Object.assign(
       new Error(
@@ -64,6 +76,40 @@ export async function loadWorkflow(
       { code: "WORKFLOW_BUNDLE_MISSING" },
     );
   }
+}
+
+export async function loadBattery(): Promise<BatteryPayload> {
+  const bundle = await loadBundle();
+  if (
+    !Array.isArray(bundle.GAA_TESTS) ||
+    typeof bundle.PROTOCOL_VERSION !== "string" ||
+    typeof bundle.BATTERY_ID !== "string" ||
+    typeof bundle.RETEST_DAYS !== "number"
+  ) {
+    throw Object.assign(
+      new Error(
+        "Workflow bundle is stale: it does not export the GAA battery. Regenerate it with " +
+          "`node build.mjs` in supabase/functions/assessment-api (see README.md §3).",
+      ),
+      { code: "WORKFLOW_BUNDLE_MISSING" },
+    );
+  }
+  // Deep-clone: the bundle's GAA_TESTS is module-level data, and a
+  // caller must never be able to mutate the protocol in place.
+  const tests = JSON.parse(JSON.stringify(bundle.GAA_TESTS)) as unknown[];
+  return {
+    battery: bundle.BATTERY_ID,
+    protocolVersion: bundle.PROTOCOL_VERSION,
+    retestDays: bundle.RETEST_DAYS,
+    tests,
+  };
+}
+
+export async function loadWorkflow(
+  stores: Stores,
+  directory: DirectoryRow,
+): Promise<Record<string, (auth: AuthContext, params: Record<string, unknown>) => unknown>> {
+  const bundle = await loadBundle();
   if (typeof bundle.createAssessmentWorkflow !== "function" || typeof bundle.createAccessDirectory !== "function") {
     throw Object.assign(
       new Error("Workflow bundle is incomplete: it must export createAssessmentWorkflow and createAccessDirectory."),

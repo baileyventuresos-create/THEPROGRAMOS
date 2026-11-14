@@ -147,3 +147,7 @@ vite.config.ts.timestamp-*
 
 # Turbo Repo
 .turbo
+
+# THE PROGRAM OS — generated Edge Function workflow bundle (do not commit;
+# regenerate with `node supabase/functions/assessment-api/build.mjs`).
+supabase/functions/assessment-api/vendor/
