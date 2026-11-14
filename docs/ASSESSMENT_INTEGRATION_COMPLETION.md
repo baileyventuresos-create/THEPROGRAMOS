@@ -284,3 +284,39 @@ athlete system; age is an athlete attribute, not a division.
 - **Still open:** migration 005 (decision §15) — apply after 004;
   Edge Function deploy (scaffold only, prerequisites now 004 applied
   + 005 pending).
+
+## Addendum — 2026-11-14: Phase 2 UI wiring complete (5-phase mission)
+
+- **Phase 2 scope (Marcus mission 2026-11-13, "COMPLETE ASSESSMENT
+  INTEGRATION & RELEASE READINESS"):** wire the UI to the
+  already-complete server workflow. The previous Phase 2 worker was
+  interrupted after one commit (`eeb1c44`, client transport adapter +
+  tests); a fresh worker resumed from that commit and completed the
+  wiring. Full design, run instructions, and test results:
+  `docs/ASSESSMENT_UI_INTEGRATION.md`.
+- **What was built:** `assessment-ui/assessment-ui.js` (live section
+  prepended to the Assessments view, athlete-profile section, run
+  form, history/progress, deferral form, plan controls, dev-only
+  "View as" role switcher); `server/dev-server.js` (localhost-only
+  dev server: static prototype + `POST /api/assessments` dispatch +
+  `GET …/battery`); `server/fixtures/dev-roster.js` (8 synthetic
+  athletes, seeded buckets: youth due today, wingback overdue 12
+  days, six never-assessed); `index.html` loads the two assessment
+  scripts before `boot()` and installs the UI. `THE PROGRAM OS.html`
+  is byte-identical — the prototype was wrapped at runtime, never
+  edited. The stale Assessments copy and dashboard due-card are
+  unchanged (decision §14 still open). The Edge Function `KNOWN GAP`
+  comment is untouched (Phase 3).
+- **Tests:** full suite **219/219** (193 baseline + 26 new: 16 UI,
+  10 dev-server over real HTTP). Typecheck/lint/build: n/a (none
+  exist in the repo). Live smoke check of the dev server passed
+  (pages 200, battery 8 tests, director roster 8, Kayla dashboard
+  3 never-assessed + 1 due).
+- **Boundaries kept:** no merge, no Edge Function deploy, no
+  production deploy, no production env/migration/data changes,
+  nothing on Neon/Taskmill/MARVIN, synthetic data only. The dev
+  server is localhost-only with memory stores.
+- **Not verified:** a real-browser render (no headless browser in
+  this environment); the first browser pass over the dev server URL
+  is still a manual step. The Edge Function still needs the
+  `GET …/battery` route before production use.

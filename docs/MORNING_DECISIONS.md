@@ -264,6 +264,16 @@ continued around every item; nothing is stalled except the item itself.
   minimal, additive UI update — no redesign, no layout change.
 - **Blocked until decided:** any HTML change to the Assessments view
   or dashboard card.
+- **Status 2026-11-14 (Phase 2):** the UI is now wired to the workflow
+  WITHOUT an HTML change — the live assessment section is prepended
+  to the Assessments view at runtime by `assessment-ui/assessment-ui.js`
+  (`THE PROGRAM OS.html` byte-identical). The draft copy below the
+  live section is still stale, and the dashboard due-card is still
+  demo data. The decision is unchanged and still open: refreshing
+  the copy (and wiring the dashboard card) needs Marcus's approval.
+  Note the live section now sits above copy saying the numbers "are
+  not being collected today", so the copy refresh should be decided
+  before any real use.
 
 ## 15. Unified athlete system — migration 005 (new, Marcus correction 2026-11-13)
 

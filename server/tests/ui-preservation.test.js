@@ -46,6 +46,13 @@ test('all owner-listed modes and surfaces still exist in the prototype', () => {
   assert.ok(index.includes('THE%20PROGRAM%20OS.html'), 'index.html still loads the prototype');
   assert.ok(index.includes('launch60-overrides.js'), 'index.html still loads overrides');
   assert.ok(index.includes('field-tested-drills.js'), 'index.html still loads field-tested drills');
+  // Phase 2 wiring (reviewed 2026-11-14): index.html also loads the
+  // assessment transport adapter + UI module before boot(). The
+  // prototype file itself is never edited; the UI module wraps
+  // vAssess/vAthlete at runtime.
+  assert.ok(index.includes('assessment-ui/assessment-client.js'), 'index.html loads the assessment transport adapter');
+  assert.ok(index.includes('assessment-ui/assessment-ui.js'), 'index.html loads the assessment UI module');
+  assert.ok(index.includes('AssessmentUI.createAssessmentUI'), 'index.html installs the assessment UI before boot');
 });
 
 test('no reservation, billing, or backend code leaked into UI files', () => {
