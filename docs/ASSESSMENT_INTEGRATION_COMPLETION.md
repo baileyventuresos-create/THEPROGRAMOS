@@ -320,3 +320,95 @@ athlete system; age is an athlete attribute, not a division.
   this environment); the first browser pass over the dev server URL
   is still a manual step. The Edge Function still needs the
   `GET …/battery` route before production use.
+
+## Addendum — 2026-11-14: Phase 3 Edge Function connected + verified (5-phase mission)
+
+- **Phase 3 scope (Marcus mission 2026-11-13, "COMPLETE ASSESSMENT
+  INTEGRATION & RELEASE READINESS"):** connect + verify the Edge
+  Function without deploying it. The `GET …/battery` route Phase 2
+  left open is now implemented; the stale `KNOWN GAP` comments are
+  resolved; the full function surface was verified in Node against
+  the real TypeScript modules.
+- **What changed:**
+  - `supabase/functions/assessment-api/index.ts` — `GET …/battery`
+    route (JWT-verified, same CORS envelope, same `{ battery,
+    protocolVersion, retestDays, tests }` shape as the dev server;
+    the browser client calls `GET <endpoint>/battery` and expects
+    `payload.tests`). JWT verification factored into one
+    `verifiedClient()` helper shared by GET and POST (same error
+    messages/codes as before); CORS `Allow-Methods` now `GET, POST,
+    OPTIONS`; 405 message updated.
+  - `supabase/functions/assessment-api/workflow.ts` — `loadBattery()`
+    (deep-clones the bundled protocol; missing or stale bundle
+    fails loudly with `WORKFLOW_BUNDLE_MISSING`); bundle loading
+    shared by `loadWorkflow`/`loadBattery`.
+  - `supabase/functions/assessment-api/entry.mjs` — bundle now also
+    exports `GAA_TESTS, PROTOCOL_VERSION, BATTERY_ID, RETEST_DAYS`
+    (same protocol source of truth, only packaged for Deno).
+  - `supabase/functions/assessment-api/store.ts` + `directory.ts` —
+    stale `KNOWN GAP` comments replaced with resolved status:
+    migration 005 was applied 2026-11-13 and verified (26/15/72/0,
+    behavioral 6/6 PASS — `server/live-checks/005/RESULTS.md`), so
+    `modified` / `capped` columns exist and the age CHECK is now
+    `age_years >= 5`. No mapping code changed — the mapping was
+    already correct; the comments were the stale part.
+  - `.gitignore` — `supabase/functions/assessment-api/vendor/` is
+    now ignored: the generated bundle showed as untracked, and the
+    README's "not committed" had nothing enforcing it.
+  - `supabase/functions/assessment-api/README.md` — §4 gaps 2, 3, 5
+    marked resolved/satisfied (005 applied); §5 records the Phase 3
+    verification.
+  - `docs/EDGE_FUNCTION_DEPLOY_STEPS.md` (new) — the exact deploy
+    steps for the release package (prerequisites, `deno check` +
+    local serve first, deploy, smoke test, rollback). Written only;
+    nothing deployed.
+- **Defect found and fixed in verification (shared workflow, not
+  Edge-only):** `server/assessment-workflow.js` `loadData()` dropped
+  `capped` / `attempts` / `unit` when mapping results, so
+  `athleteAssessmentView` history rows always showed `capped:
+  false` and `attempts`/`unit` null — the Phase 2 UI renders
+  history with `fmtResult(r.result, r.unit, { modified, capped })`,
+  so capped results never showed "(capped)" and values lost their
+  unit. Persistence was never affected (the stored rows were
+  correct). Fixed additively in `loadData` (three fields added,
+  nothing removed); covered by regression assertions in the new
+  tests, in both the memory-store and the PostgREST paths.
+- **Tests:** 27 new tests in `server/tests/edge-function.test.js`
+  (+ `server/tests/fake-supabase.js` in-memory PostgREST stand-in,
+  `edge-function-hooks.mjs` + `edge-function-supabase-stub.mjs`
+  for the `esm.sh` import and the Deno runtime). Full suite
+  **246/246** (219 baseline + 27 new). Coverage: `ALLOWED` table
+  identical to `server/assessment-api.js`; role/unauthenticated/
+  out-of-cohort/forged-actor refusals with the same codes;
+  idempotent replay records once; modified/capped survive the
+  PostgREST round-trip end to end through the real HTTP handler;
+  Smart Draft advisory-only (`advisoryOnly: true, autoRewrite:
+  false`) and writes nothing; client built with the anon key only
+  (no service-role key in any function source); directory mapping
+  from the database (coach/guardian/athlete, adult age 48 as-is);
+  missing/stale bundles fail loudly. `tsc --noEmit --strict`
+  re-verified clean on all five `.ts` files (Deno + `esm.sh`
+  stubbed; stubs live only in the check setup, not the repo).
+- **Verified vs not verified (honest):** verified in Node with
+  type-stripped imports of the real `.ts` modules, the real
+  generated bundle, a stubbed `auth.getUser` (JWT claims), and an
+  in-memory PostgREST stand-in — no live project, no Deno runtime.
+  **Not verified:** `deno check` / `supabase functions serve` (no
+  CLI in this environment — run on the deploy machine first, per
+  the deploy doc); the deployed function against live Supabase
+  (needs the deploy approval + a real coach JWT smoke test);
+  RLS against the function (the fake client does not enforce RLS —
+  live RLS was verified separately in the §5 checks); a
+  real-browser render (carried over from Phase 2).
+- **Boundaries kept:** no merge, no Edge Function deploy, no
+  production deploy, no production env/migration/data changes,
+  nothing on Neon/Taskmill/MARVIN, synthetic data only. The
+  migration 005 SQL file's own header still says "NOT APPLIED"
+  (stale file text — the migration was applied via the dashboard;
+  the file was left untouched because it is the applied artifact).
+- **Remaining for Phases 4–5:** full synthetic workflow testing
+  (Phase 4) and the release package (Phase 5). The Edge Function
+  is ready to deploy once Marcus approves the deploy step; the
+  only pre-deploy commands left are the ones this environment
+  cannot run (`deno check`, `supabase functions serve`, deploy,
+  live smoke test).
