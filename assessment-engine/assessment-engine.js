@@ -14,6 +14,10 @@
     'rotational-scoop-r':{id:'rotational-scoop-r',name:'Rotational Scoop Throw — Right',domain:'rotational_power',unit:'ft',direction:'higher',attempts:3,aggregation:'best',side:'right',pairId:'rotational-scoop',retestDays:28},
     'rotational-scoop-l':{id:'rotational-scoop-l',name:'Rotational Scoop Throw — Left',domain:'rotational_power',unit:'ft',direction:'higher',attempts:3,aggregation:'best',side:'left',pairId:'rotational-scoop',retestDays:28},
     'push-ups':{id:'push-ups',name:'Quality Push-Ups',domain:'relative_strength',unit:'reps',direction:'higher',attempts:1,aggregation:'best',retestDays:28},
+    '5-10-5-shuttle':{id:'5-10-5-shuttle',name:'5-10-5 Shuttle',domain:'agility',unit:'sec',direction:'lower',attempts:2,aggregation:'best',retestDays:28},
+    'single-leg-balance-r':{id:'single-leg-balance-r',name:'Single-Leg Balance — Right',domain:'balance',unit:'sec',direction:'higher',attempts:1,aggregation:'best',side:'right',pairId:'single-leg-balance',retestDays:28},
+    'single-leg-balance-l':{id:'single-leg-balance-l',name:'Single-Leg Balance — Left',domain:'balance',unit:'sec',direction:'higher',attempts:1,aggregation:'best',side:'left',pairId:'single-leg-balance',retestDays:28},
+    '6min-walk-run':{id:'6min-walk-run',name:'6-Minute Walk/Run',domain:'cardiovascular',unit:'m',direction:'higher',attempts:1,aggregation:'best',retestDays:28},
     'side-plank-r':{id:'side-plank-r',name:'Side Plank — Right',domain:'trunk_control',unit:'sec',direction:'higher',attempts:1,aggregation:'best',side:'right',pairId:'side-plank',retestDays:28},
     'side-plank-l':{id:'side-plank-l',name:'Side Plank — Left',domain:'trunk_control',unit:'sec',direction:'higher',attempts:1,aggregation:'best',side:'left',pairId:'side-plank',retestDays:28},
     'throw-velo':{id:'throw-velo',name:'Throwing Velocity',domain:'throwing_velocity',unit:'mph',direction:'higher',attempts:5,aggregation:'best',module:'baseball',retestDays:28},
@@ -23,6 +27,12 @@
 
   const BATTERIES={
     generalAthlete:['10yd-sprint','broad-jump','rotational-scoop-r','rotational-scoop-l','push-ups','side-plank-r','side-plank-l'],
+    // Universal General Athletic Assessment (GAA v1): the standardized
+    // 8-test battery. Side plank and single-leg balance are bilateral,
+    // so the battery lists 9 definition ids for 8 tests. The movement
+    // assessment is observation-only and is NOT an engine definition —
+    // it has no numeric result; see server/assessment-battery.js.
+    generalAthleticAssessment:['10yd-sprint','broad-jump','5-10-5-shuttle','push-ups','side-plank-r','side-plank-l','single-leg-balance-r','single-leg-balance-l','6min-walk-run'],
     baseball:['throw-velo','throw-accuracy','exit-velo']
   };
 
@@ -68,5 +78,5 @@
     const results=(entries||[]).map(e=>({assessmentId:e.assessmentId,attempts:finite(e.attempts),result:result(e.assessmentId,e.attempts),notes:e.notes||''}));
     return {version:1,athleteId:String(athleteId||''),recordedAt:(meta&&meta.recordedAt)||new Date().toISOString(),battery:(meta&&meta.battery)||'custom',results,notes:(meta&&meta.notes)||''};
   }
-  return {version:'1.0.0',definitions:DEFINITIONS,batteries:BATTERIES,result,change,asymmetry,interpret,generatePriorities,buildSession};
+  return {version:'1.1.0',definitions:DEFINITIONS,batteries:BATTERIES,result,change,asymmetry,interpret,generatePriorities,buildSession};
 });

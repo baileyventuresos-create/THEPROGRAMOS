@@ -1,0 +1,11 @@
+# THE PROGRAM OS — Supabase project config (local only)
+# supabase/config.toml
+#
+# STATUS: local scaffold config. Nothing here deploys anything.
+# The assessment-api function is UNDEPLOYED; this file only records
+# its intended platform settings for when a deploy is approved.
+#
+# Project: TheProgramOS, ref rkgdwqgmldznczikrjip (us-east-2).
+
+[functions.assessment-api]
+verify_jwt = true

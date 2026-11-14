@@ -16,7 +16,7 @@
       const marker = 'boot();';
       const at = html.lastIndexOf(marker);
       if (at < 0) throw new Error('OS boot marker not found');
-     html = html.slice(0, at) + '<\/script><script src="./launch60-overrides.js"><\/script><script src="./launch60-corrections.js"><\/script><script src="./field-tested-drills.js"><\/script><script>boot();' + html.slice(at + marker.length);
+     html = html.slice(0, at) + '<\/script><script src="./launch60-overrides.js"><\/script><script src="./launch60-corrections.js"><\/script><script src="./field-tested-drills.js"><\/script><script src="./assessment-ui/assessment-client.js"><\/script><script src="./assessment-ui/assessment-ui.js"><\/script><script>if(window.AssessmentUI){try{window.__assessmentUI=window.AssessmentUI.createAssessmentUI({});window.__assessmentUI.install();}catch(e){console.error("[assessments] UI wiring failed",e);}}boot();' + html.slice(at + marker.length);
       document.open();
       document.write(html);
       document.close();
