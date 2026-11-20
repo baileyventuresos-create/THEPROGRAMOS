@@ -174,6 +174,22 @@ test('renderPlans shows test-mode banner, prices, and checkout only for paid pla
   assert.ok(annual.includes('$290 / year'));
 });
 
+test('renderPlans confirm button carries data-sui-session, never data-session (prototype collision guard)', () => {
+  /* Regression (validation defect, 2026-11-20): the prototype's
+   * global click handler treats data-session as "open session
+   * drawer" (ds.session in THE PROGRAM OS.html). A billing session
+   * id in data-session set S.drawer to a nonexistent session and
+   * froze every subsequent app render after a test checkout. */
+  const state = {
+    plans: Object.values(PLANS), interval: 'month',
+    checkout: { sessionId: 'fake_cs_1', priceCents: 1499, interval: 'month', planCode: 'athlete_remote' },
+  };
+  const html = UI.renderPlans(state, h());
+  assert.ok(html.includes('data-sui="confirm-checkout" data-sui-session="fake_cs_1"'),
+    'confirm button carries the namespaced session attribute');
+  assert.ok(!html.includes('data-session="'), 'no bare data-session attribute (prototype collision)');
+});
+
 test('renderAthlete shows honest tier, assignments, completion form, truncated history', () => {
   const state = {
     entitlements: { kind: 'athlete', athleteId: 'a1', entitlements: { tier: 'free', historyDays: 90, fullHistory: false, maxCoachLinks: 1, trainingDaysPerWeek: 1 } },

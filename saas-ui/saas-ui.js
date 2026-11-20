@@ -343,10 +343,14 @@
         }).join('') + '</div>';
     }
     if (state.checkout) {
+      /* data-sui-session, never data-session: the prototype's global
+       * click handler treats data-session as "open session drawer"
+       * (THE PROGRAM OS.html ds.session), which froze the whole app
+       * render after a test checkout (validation defect, 2026-11-20). */
       const c = state.checkout;
       html += '<div class="note" style="margin-top:12px">Test checkout session <span class="mono">' + h.esc(c.sessionId) + '</span> — '
         + h.esc(fmtMoney(c.priceCents)) + ' / ' + h.esc(c.interval) + ' for ' + h.esc(c.planCode) + '. '
-        + '<button class="btn sm solid" data-sui="confirm-checkout" data-session="' + h.esc(c.sessionId) + '">Confirm test checkout</button> '
+        + '<button class="btn sm solid" data-sui="confirm-checkout" data-sui-session="' + h.esc(c.sessionId) + '">Confirm test checkout</button> '
         + '<span class="small muted">Simulates a completed checkout + webhook. No payment occurs.</span></div>';
     }
     return html;
@@ -1241,7 +1245,7 @@
         'org-overview': function () { return loadOrgOverview(); },
         'invite-coach': function () { return inviteCoach(); },
         'checkout': function () { return checkout(t.getAttribute('data-plan'), t.getAttribute('data-audience')); },
-        'confirm-checkout': function () { return confirmCheckout(t.getAttribute('data-session')); },
+        'confirm-checkout': function () { return confirmCheckout(t.getAttribute('data-sui-session')); },
         'cancel-sub': function () { return cancelSubscription(t.getAttribute('data-sub')); },
         'profile-refresh': function () { return loadProfile(athleteId); },
       };
