@@ -56,6 +56,15 @@ test('all owner-listed modes and surfaces still exist in the prototype', () => {
   assert.ok(index.includes('assessment-ui/assessment-client.js'), 'index.html loads the assessment transport adapter');
   assert.ok(index.includes('assessment-ui/assessment-ui.js'), 'index.html loads the assessment UI module');
   assert.ok(index.includes('AssessmentUI.createAssessmentUI'), 'index.html installs the assessment UI before boot');
+  // SaaS frontend wiring (reviewed 2026-11-20): index.html also loads
+  // the SaaS transport adapter + UI module before boot(). The
+  // prototype file itself is never edited; the SaaS module wraps
+  // vDashboard/vCoach/vAthleteMode/vAthlete at runtime. The
+  // index.html hash was updated in the reviewed snapshot commit for
+  // this loader-only change (old d4ae39d9…, new 2e437ce2…).
+  assert.ok(index.includes('saas-ui/saas-client.js'), 'index.html loads the SaaS transport adapter');
+  assert.ok(index.includes('saas-ui/saas-ui.js'), 'index.html loads the SaaS UI module');
+  assert.ok(index.includes('SaasUI.createSaasUI'), 'index.html installs the SaaS UI before boot');
 });
 
 test('no reservation, billing, or backend code leaked into UI files', () => {
