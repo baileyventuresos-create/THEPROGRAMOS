@@ -39,9 +39,31 @@ function err(code, message) {
   return e;
 }
 
-function createAccessDirectory({ athletes = [], coachAuth = {} } = {}) {
+function createAccessDirectory({ athletes = [], coachAuth = {}, links = [], orgMemberships = [] } = {}) {
   const byId = new Map();
   for (const a of athletes) byId.set(String(a.id), a);
+
+  /* SaaS extension (additive; docs/SAAS_ARCHITECTURE.md §2.4): active
+   * coach-athlete links grant the linked coach assess/view scope,
+   * and org_admins view (never assess) athletes linked inside orgs
+   * they admin. With no links/memberships supplied, behaviour is
+   * exactly the pre-SaaS cohort/guardian/self rules.
+   *   links: [{ coachId, athleteId, organizationId, status }]
+   *   orgMemberships: [{ authUserId, organizationId, orgRole, status }] */
+  const activeLinks = (links || []).filter(l => l && l.status === 'active');
+  function hasActiveLink(coachId, athleteId) {
+    return !!coachId && activeLinks.some(l => l.coachId === coachId && String(l.athleteId) === String(athleteId));
+  }
+  function adminOrgIdsFor(auth) {
+    if (!auth || !auth.authUserId) return [];
+    return (orgMemberships || [])
+      .filter(m => m && m.authUserId === auth.authUserId && m.status === 'active' && m.orgRole === 'org_admin')
+      .map(m => m.organizationId);
+  }
+  function orgAdminViews(auth, athleteId) {
+    const orgs = adminOrgIdsFor(auth);
+    return orgs.length > 0 && activeLinks.some(l => String(l.athleteId) === String(athleteId) && orgs.includes(l.organizationId));
+  }
 
   function coachIdFor(auth) {
     if (!auth) return null;
@@ -63,7 +85,7 @@ function createAccessDirectory({ athletes = [], coachAuth = {} } = {}) {
     if (!auth || typeof auth.authUserId !== 'string' || !auth.authUserId) {
       throw err('UNAUTHENTICATED', 'An authenticated user is required.');
     }
-    if (!['director', 'coach', 'parent', 'athlete'].includes(auth.role)) {
+    if (!['director', 'coach', 'parent', 'athlete', 'org_admin'].includes(auth.role)) {
       throw err('FORBIDDEN', `Role '${auth.role}' has no assessment access.`);
     }
     return auth;
@@ -78,7 +100,9 @@ function createAccessDirectory({ athletes = [], coachAuth = {} } = {}) {
     if (auth.role === 'director') return true;
     if (auth.role !== 'coach') return false;
     const cid = coachIdFor(auth);
-    return !!cid && Array.isArray(a.coachIds) && a.coachIds.includes(cid);
+    if (!cid) return false;
+    if (Array.isArray(a.coachIds) && a.coachIds.includes(cid)) return true;
+    return hasActiveLink(cid, athleteId);
   }
 
   /* Can this caller view this athlete's assessment records?
@@ -90,6 +114,7 @@ function createAccessDirectory({ athletes = [], coachAuth = {} } = {}) {
     if (!a) return false;
     if (auth.role === 'director') return true;
     if (auth.role === 'coach') return canAssess(auth, athleteId);
+    if (auth.role === 'org_admin') return orgAdminViews(auth, athleteId);
     if (auth.role === 'parent') {
       return Array.isArray(a.guardianUserIds) && a.guardianUserIds.includes(auth.authUserId);
     }
@@ -124,7 +149,10 @@ function createAccessDirectory({ athletes = [], coachAuth = {} } = {}) {
     if (auth.role === 'director') return all.map(a => ({ ...a }));
     if (auth.role === 'coach') {
       const cid = coachIdFor(auth);
-      return all.filter(a => cid && Array.isArray(a.coachIds) && a.coachIds.includes(cid)).map(a => ({ ...a }));
+      return all.filter(a => cid && ((Array.isArray(a.coachIds) && a.coachIds.includes(cid)) || hasActiveLink(cid, a.id))).map(a => ({ ...a }));
+    }
+    if (auth.role === 'org_admin') {
+      return all.filter(a => orgAdminViews(auth, a.id)).map(a => ({ ...a }));
     }
     if (auth.role === 'parent') {
       return all.filter(a => Array.isArray(a.guardianUserIds) && a.guardianUserIds.includes(auth.authUserId)).map(a => ({ ...a }));
