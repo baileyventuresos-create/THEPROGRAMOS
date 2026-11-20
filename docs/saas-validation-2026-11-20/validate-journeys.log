@@ -1,0 +1,62 @@
+Dev server: http://127.0.0.1:40579 (memory stores, synthetic seed)
+PASS J1 homepage served :: GET /homepage.html -> 200
+PASS J1 homepage names the program + test-mode honesty :: contains "The Program" and a test-mode notice
+PASS J1 homepage links into the app (log in / create account) :: links to ./index.html present
+PASS J1 plans API returns the 6 seeded plans :: codes=["free_athlete","athlete_remote","coach_starter","coach_pro","team_academy","academy_scale"]
+PASS J2 athlete registration succeeds :: {"ok":true,"data":{"appUser":{"id":"71229002-8cb5-49c8-bdca-c3ff32a7c738","authUserId":"val-ath-1","email":"val1@dev.invalid","role":"athlete"},"athlete":{"id":
+PASS J2 new athlete is on the free tier (90-day history window) :: tier=free historyDays=90
+PASS J2 myEntitlements resolves free for the new athlete :: tier=free
+PASS J5 coach registration creates solo org + 14-day Coach Starter trial :: org=solo trial=trialing/coach_starter
+PASS J3 athlete cannot assign training (role refusal, server-side) :: code=FORBIDDEN
+PASS J3 athlete cannot call coach roster (role refusal) :: code=FORBIDDEN
+PASS J3 first coach link succeeds for free athlete :: {"ok":true,"data":{"link":{"id":"57f87f4b-79ca-470a-ad97-be9163c37ef5","coachId":"ba22acbb-e287-432c-b847-a7493e849403",
+PASS J3 second coach link refused for free athlete (ENTITLEMENT_LIMIT) :: code=ENTITLEMENT_LIMIT
+PASS J4 Safety Review game rejected server-side (GAME_NOT_ASSIGNABLE) :: code=GAME_NOT_ASSIGNABLE
+PASS J4 unknown game ID rejected (INVALID_GAME_ID) :: code=INVALID_GAME_ID
+PASS J4 coach assignment created with games + dose :: status=assigned
+PASS J4 athlete sees the assignment :: count=1
+PASS J4 athlete completes with duration/RPE/note :: rpe=7
+PASS J4 double-complete refused (ALREADY_COMPLETED) :: code=ALREADY_COMPLETED
+PASS J4 history shows the completion (joined read model) :: completions=1
+PASS J4 history persists across a fresh request (re-login equivalent) :: completions=1 (dev memory store: restart wipes; within-session persistence + store tests prove the join)
+PASS J5 coach test-mode checkout session created (fake adapter) :: sessionId=fake_cs_1 priceCents=7900
+PASS J5 test checkout confirms to an active subscription :: status=active plan=coach_pro
+PASS J5 coach invitation returns a one-time token :: token length=48
+PASS J5 athlete accepts invitation and is roster-linked :: {"ok":true,"data":{"link":{"link":{"id":"27242ac7-ac96-41a6-813c-9249597d1d70","coachId":"ba22acbb-e287-432c-b847-a7493e849403","athleteId":"0b25dabc-8d9a-4195-
+PASS J5 invitation token is single-use (INVITATION_INVALID on replay) :: code=INVITATION_INVALID
+PASS J5 Coach Starter roster fills to the 15-athlete cap :: linked=15 rosterCount=15
+PASS J5 16th athlete refused at cap (ENTITLEMENT_LIMIT) :: code=ENTITLEMENT_LIMIT
+PASS J5 explicit overage confirmation links with overage flag :: overage=true
+PASS J6 linked coach views youth assessment record (seeded baseline + reassessment) :: history sessions=2
+PASS J6 coach athleteHistory joins assessment sessions for linked athlete :: assessments=2
+PASS J6 guardian parent views own athlete assessments :: ok=true
+PASS J7 organization created with trial :: {"ok":true,"data":{"organization":{"id":"1e427f78-4efd-431c-af55-82e7d95a9b90","kind":"academy","name":"Val Academy","slug":"val-academy","s
+PASS J7 org_admin invites a second coach :: {"ok":true,"data":{"invitation":{"id":"f08a5484-44ca-47d6-8b77-63ea3db23998","organizationId":"1e427f78-4efd-431c-af55-8
+PASS J7 second coach joins the organization :: {"ok":true,"data":{"organization":{"id":"1e427f78-4efd-431c-af55-82e7d95a9b90","kind":"academy","name":"Val Academy","slug":"val-academy","s
+PASS J7 org coach links an athlete inside the org :: {"ok":true,"data":{"link":{"id":"ec9d4c89-6f16-41a1-83bf-742251aaff63","coachId":"7c5149bf-9cb2-4ae0-9101-171d2ee68847",
+PASS J7 org overview shows both coaches + the org athlete :: coaches=2 athletes=1
+PASS J7 org_admin views in-org athlete assessments (THE FIX, over HTTP) :: ok=true code=undefined
+PASS J7 org_admin still cannot record assessments (read-only) :: code=FORBIDDEN
+PASS J7 org_admin cannot view athletes outside their org :: code=FORBIDDEN
+PASS J8 Coach B cannot list Coach A athlete assignments (ATHLETE_NOT_FOUND) :: code=ATHLETE_NOT_FOUND
+PASS J8 Coach B cannot read Coach A athlete history (ATHLETE_NOT_FOUND) :: code=ATHLETE_NOT_FOUND
+PASS J8 Coach B cannot view Coach A athlete assessments (FORBIDDEN) :: code=FORBIDDEN
+PASS J8 Coach B roster never contains Coach A athletes :: jordan roster=["dev-ath-04","dev-ath-05"]
+PASS J8 Coach B cannot assign to Coach A athlete (FORBIDDEN) :: code=FORBIDDEN
+PASS J8 Coach A roster excludes Coach B athletes :: kayla roster count=4
+PASS J9 athlete test checkout activates paid tier :: tier=paid
+PASS J9 cancel at period end keeps access until period end :: tier=paid
+PASS J9 expiry derives athlete back to free (no deletion) :: tier=free
+PASS J9 training history retained after expiry :: completions=1
+PASS J9 expiring all granting subscriptions makes the coach read-only :: expired=2 readOnly=true
+PASS J9 expired coach is read-only: new links refused (SUBSCRIPTION_INACTIVE) :: code=SUBSCRIPTION_INACTIVE
+PASS J9 expired coach roster remains readable (read-only, not deleted) :: count=2
+PASS J10 $149 member checkout refused ALREADY_COVERED (no double charge) :: code=ALREADY_COVERED coveringSource=in_person_membership
+PASS J10 member entitlement resolves to member tier with full history :: tier=member fullHistory=true
+PASS J10 in-person assessment flow intact (seeded wingback baseline visible to cohort coach) :: history sessions=1
+PASS J10 GAA battery protocol route intact :: tests=8
+PASS JX minor without consent cannot be linked (CONSENT_REQUIRED) :: code=CONSENT_REQUIRED
+PASS JX director records off-platform consent (paper_on_file) :: {"ok":true,"data":{"consent":{"id":"5ff6c4ba-4767-4f7a-bf01-7cc0cb983033","athleteId":"b41eb43b-1502-4954-8d29-d53df5f0d
+PASS JX link activates after consent granted :: {"ok":true,"data":{"link":{"id":"55f6cb36-e457-4531-bd5c-2d5c3547dfd3","coachId":"kayla","athleteId":"b41eb43b-1502-4954
+
+TOTAL: 59 passed, 0 failed
