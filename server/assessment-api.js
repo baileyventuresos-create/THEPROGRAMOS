@@ -37,20 +37,29 @@
 
 const { createAssessmentWorkflow } = require('./assessment-workflow');
 
+/* org_admin (SaaS validation fix, 2026-11-20): read-only scope over
+ * athletes linked inside orgs they admin (server/assessment-access.js
+ * orgAdminViews). Granted on the read methods only — listAthletes,
+ * athleteAssessmentView, planReadiness, advisoryPriorities (all flow
+ * through requireView/listAthletes). Never on recording/writing
+ * methods, getDraft (coach working state, requireAssess), or
+ * coachDashboard (coach-scoped; org_admin uses the SaaS orgOverview).
+ * Mirrored in supabase/functions/assessment-api/api.ts — keep in sync
+ * (pinned by server/tests/edge-function.test.js). */
 const ALLOWED = {
-  listAthletes: ['director', 'coach', 'parent', 'athlete'],
+  listAthletes: ['director', 'coach', 'parent', 'athlete', 'org_admin'],
   startAssessment: ['director', 'coach'],
   recordAttempts: ['director', 'coach'],
   getDraft: ['director', 'coach'],
   discardDraft: ['director', 'coach'],
   completeAssessment: ['director', 'coach'],
-  athleteAssessmentView: ['director', 'coach', 'parent', 'athlete'],
+  athleteAssessmentView: ['director', 'coach', 'parent', 'athlete', 'org_admin'],
   coachDashboard: ['director', 'coach'],
   recordDeferral: ['director', 'coach'],
-  planReadiness: ['director', 'coach', 'parent', 'athlete'],
+  planReadiness: ['director', 'coach', 'parent', 'athlete', 'org_admin'],
   createPlan: ['director', 'coach'],
   finalizePlan: ['director', 'coach'],
-  advisoryPriorities: ['director', 'coach', 'parent', 'athlete'],
+  advisoryPriorities: ['director', 'coach', 'parent', 'athlete', 'org_admin'],
 };
 
 function err(code, message) {

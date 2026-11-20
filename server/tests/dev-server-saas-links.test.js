@@ -111,19 +111,50 @@ test('dev server: org_admin views (never assesses) athletes linked inside their 
     // The founder is org_admin of their solo org. The access
     // directory grants org_admin VIEW (never assess) over athletes
     // linked inside their orgs (server/assessment-access.js), and
-    // the directory wiring above carries the live links — but the
+    // the directory wiring above carries the live links. The
     // assessment API role table (server/assessment-api.js ALLOWED,
-    // mirrored in the Edge Function) does not yet include
-    // org_admin on any method, so the API refuses org_admin calls
-    // today. Pin that current behavior; adding org_admin to the
-    // read methods is a backend change for a separately approved
-    // step (see docs/SAAS_UI.md gaps).
+    // mirrored in the Edge Function) now grants org_admin the READ
+    // methods only (SaaS validation fix, 2026-11-20): view succeeds
+    // in-org, every recording/writing method stays FORBIDDEN, and
+    // athletes outside the org stay invisible.
     const admin = { 'X-Dev-Role': 'org_admin', 'X-Dev-User': 'dev-coach-founder' };
     const view = await post(base, '/api/assessments', {
       method: 'athleteAssessmentView', params: { athleteId },
     }, admin);
-    assert.equal(view.json.ok, false);
-    assert.equal(view.json.error.code, 'FORBIDDEN');
+    assert.equal(view.json.ok, true, JSON.stringify(view.json));
+    assert.equal(view.json.data.athleteId, athleteId);
+
+    const listed = await post(base, '/api/assessments', { method: 'listAthletes', params: {} }, admin);
+    assert.equal(listed.json.ok, true, JSON.stringify(listed.json));
+    assert.ok(listed.json.data.some(a => a.id === athleteId), 'org_admin lists in-org linked athlete');
+    assert.ok(!listed.json.data.some(a => a.id === 'ath-synth-youth-12'), 'org_admin does not list out-of-org athletes');
+
+    const readiness = await post(base, '/api/assessments', {
+      method: 'planReadiness', params: { athleteId },
+    }, admin);
+    assert.equal(readiness.json.ok, true, JSON.stringify(readiness.json));
+
+    const advisory = await post(base, '/api/assessments', {
+      method: 'advisoryPriorities', params: { athleteId },
+    }, admin);
+    assert.equal(advisory.json.ok, true, JSON.stringify(advisory.json));
+
+    // Out-of-org athlete (seeded youth, different org) stays refused.
+    const outside = await post(base, '/api/assessments', {
+      method: 'athleteAssessmentView', params: { athleteId: 'ath-synth-youth-12' },
+    }, admin);
+    assert.equal(outside.json.ok, false);
+    assert.equal(outside.json.error.code, 'FORBIDDEN', 'org_admin cannot view athletes outside their org');
+
+    // Read-only scope: every recording/writing method is refused.
+    for (const method of ['startAssessment', 'recordAttempts', 'getDraft', 'discardDraft',
+      'completeAssessment', 'coachDashboard', 'recordDeferral', 'createPlan', 'finalizePlan']) {
+      const res = await post(base, '/api/assessments', {
+        method, params: { athleteId, planId: 'any-plan', entries: [] },
+      }, admin);
+      assert.equal(res.json.ok, false, `${method} must refuse org_admin`);
+      assert.equal(res.json.error.code, 'FORBIDDEN', `${method} refuses org_admin (read-only scope)`);
+    }
 
     const assess = await post(base, '/api/assessments', {
       method: 'startAssessment', params: { athleteId },
