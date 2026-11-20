@@ -166,7 +166,64 @@ function seedSaasStore(store) {
 }
 
 function createDevServer({ port = DEFAULT_PORT, root = ROOT, seed = true } = {}) {
-  const directory = createAccessDirectory({ athletes: ATHLETES, coachAuth: COACH_AUTH });
+  const saasStore = new MemorySaasStore();
+  seedSaasStore(saasStore);
+
+  /* SaaS integration (frontend slice): the assessment directory is
+   * rebuilt from the live SaaS store on every call, so athletes
+   * linked remotely (coach_athlete_links) appear in assessment
+   * flows immediately — a linked coach can assess/view, an
+   * org_admin can view (never assess) inside their orgs. Cohort
+   * scope is unchanged (server/assessment-access.js additive
+   * rules). SaaS-registered athletes/coaches join the directory
+   * with their auth UIDs so self/guardian/coach resolution works
+   * for remote-only people too. Dev-only, memory stores. */
+  function buildDirectory() {
+    const rosterIds = new Set(ATHLETES.map(a => String(a.id)));
+    const extra = [...saasStore.athletes.values()]
+      .filter(a => !rosterIds.has(String(a.id)))
+      .map(a => {
+        const appUser = a.appUserId ? saasStore.appUserById(a.appUserId) : null;
+        const guardianUserIds = saasStore.athleteGuardians
+          .filter(ag => ag.athleteId === a.id)
+          .map(ag => {
+            const g = saasStore.guardians.get(String(ag.guardianId));
+            const gu = g ? saasStore.appUserById(g.userId) : null;
+            return gu ? gu.authUserId : null;
+          })
+          .filter(Boolean);
+        return {
+          id: a.id, name: a.name, age: a.age ?? null, coachIds: [],
+          guardianUserIds, authUserId: appUser ? appUser.authUserId : null,
+        };
+      });
+    const coachAuth = { ...COACH_AUTH };
+    for (const c of saasStore.coaches.values()) {
+      const u = saasStore.appUserById(c.userId);
+      if (u) coachAuth[u.authUserId] = c.id;
+    }
+    const orgMemberships = saasStore.orgMemberships.map(m => {
+      const u = saasStore.appUserById(m.appUserId);
+      return u ? { authUserId: u.authUserId, organizationId: m.organizationId, orgRole: m.orgRole, status: m.status } : null;
+    }).filter(Boolean);
+    return createAccessDirectory({
+      athletes: [...ATHLETES, ...extra],
+      coachAuth,
+      links: saasStore.links,
+      orgMemberships,
+    });
+  }
+  const directory = {
+    get byId() { return buildDirectory().byId; },
+    coachIdFor: (auth) => buildDirectory().coachIdFor(auth),
+    athleteFor: (auth) => buildDirectory().athleteFor(auth),
+    requireAuth: (auth) => buildDirectory().requireAuth(auth),
+    canAssess: (auth, id) => buildDirectory().canAssess(auth, id),
+    canView: (auth, id) => buildDirectory().canView(auth, id),
+    requireAssess: (auth, id) => buildDirectory().requireAssess(auth, id),
+    requireView: (auth, id) => buildDirectory().requireView(auth, id),
+    listAthletes: (auth) => buildDirectory().listAthletes(auth),
+  };
   const workflow = createAssessmentWorkflow({
     store: new MemoryAssessmentStore(),
     reassessmentStore: new MemoryReassessmentStore(),
@@ -174,9 +231,6 @@ function createDevServer({ port = DEFAULT_PORT, root = ROOT, seed = true } = {})
     directory,
   });
   const api = createAssessmentApi({ workflow });
-
-  const saasStore = new MemorySaasStore();
-  seedSaasStore(saasStore);
   const billing = new FakeBillingAdapter(saasStore);
   const saasApi = createSaasApi({
     store: saasStore,
