@@ -204,15 +204,15 @@ export function createSupabaseStores(supabase: SupabaseClient) {
   const store = {
     // -- assessment store (server/assessment-store.js interface) --
     async insertSession(row: Row): Promise<Row> {
-      const saved = await one(supabase.from("assessment_sessions").insert(sessionToDb(row)).select().single());
+      const saved = await one<Row>(supabase.from("assessment_sessions").insert(sessionToDb(row)).select().single());
       return sessionFromDb(saved as Row);
     },
     async insertResult(row: Row): Promise<Row> {
-      const saved = await one(supabase.from("assessment_results").insert(resultToDb(row)).select().single());
+      const saved = await one<Row>(supabase.from("assessment_results").insert(resultToDb(row)).select().single());
       return resultFromDb(saved as Row);
     },
     async insertDerived(row: Row): Promise<Row> {
-      const saved = await one(supabase.from("assessment_derived_records").insert(derivedToDb(row)).select().single());
+      const saved = await one<Row>(supabase.from("assessment_derived_records").insert(derivedToDb(row)).select().single());
       return derivedFromDb(saved as Row);
     },
     async listSessions(athleteId: string): Promise<Row[]> {
@@ -248,7 +248,7 @@ export function createSupabaseStores(supabase: SupabaseClient) {
       return data ? draftFromDb(data as Row) : null;
     },
     async upsertDraft(row: Row): Promise<Row> {
-      const saved = await one(supabase.from("assessment_drafts")
+      const saved = await one<Row>(supabase.from("assessment_drafts")
         .upsert(draftToDb(row), { onConflict: "athlete_id,battery" }).select().single());
       return draftFromDb(saved as Row);
     },
@@ -263,7 +263,7 @@ export function createSupabaseStores(supabase: SupabaseClient) {
   const reassessmentStore = {
     // -- reassessment store (server/reassessment.js interface) --
     async insertDeferral(row: Row): Promise<Row> {
-      const saved = await one(supabase.from("assessment_deferrals").insert(deferralToDb(row)).select().single());
+      const saved = await one<Row>(supabase.from("assessment_deferrals").insert(deferralToDb(row)).select().single());
       return deferralFromDb(saved as Row);
     },
     async listDeferrals(athleteId?: string): Promise<Row[]> {
@@ -274,7 +274,7 @@ export function createSupabaseStores(supabase: SupabaseClient) {
       return (data as Row[]).map(deferralFromDb);
     },
     async upsertSchedule(row: Row): Promise<Row> {
-      const saved = await one(supabase.from("assessment_schedules")
+      const saved = await one<Row>(supabase.from("assessment_schedules")
         .upsert(scheduleToDb(row), { onConflict: "athlete_id,battery" }).select().single());
       return scheduleFromDb(saved as Row);
     },
@@ -288,7 +288,7 @@ export function createSupabaseStores(supabase: SupabaseClient) {
   const planStore = {
     // -- plan store (MemoryPlanStore interface in server/assessment-workflow.js) --
     async insertPlan(row: Row): Promise<Row> {
-      const saved = await one(supabase.from("development_plans").insert(planToDb(row)).select().single());
+      const saved = await one<Row>(supabase.from("development_plans").insert(planToDb(row)).select().single());
       return planFromDb(saved as Row);
     },
     async getPlan(id: string): Promise<Row | null> {
@@ -301,7 +301,7 @@ export function createSupabaseStores(supabase: SupabaseClient) {
       // Keep the caller's id: planToDb generates a fresh UUID, so restore it.
       db.id = row.id;
       db.updated_at = new Date().toISOString();
-      const saved = await one(supabase.from("development_plans").update(db).eq("id", row.id as string).select().single());
+      const saved = await one<Row>(supabase.from("development_plans").update(db).eq("id", row.id as string).select().single());
       return planFromDb(saved as Row);
     },
     async listPlans(athleteId?: string): Promise<Row[]> {
