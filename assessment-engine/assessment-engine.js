@@ -22,7 +22,14 @@
     'side-plank-l':{id:'side-plank-l',name:'Side Plank — Left',domain:'trunk_control',unit:'sec',direction:'higher',attempts:1,aggregation:'best',side:'left',pairId:'side-plank',retestDays:28},
     'throw-velo':{id:'throw-velo',name:'Throwing Velocity',domain:'throwing_velocity',unit:'mph',direction:'higher',attempts:5,aggregation:'best',module:'baseball',retestDays:28},
     'throw-accuracy':{id:'throw-accuracy',name:'Throwing Accuracy',domain:'throwing_accuracy',unit:'pct',direction:'higher',attempts:1,aggregation:'best',module:'baseball',retestDays:28},
-    'exit-velo':{id:'exit-velo',name:'Exit Velocity',domain:'bat_speed_output',unit:'mph',direction:'higher',attempts:5,aggregation:'best',module:'baseball',retestDays:28}
+    'exit-velo':{id:'exit-velo',name:'Exit Velocity',domain:'bat_speed_output',unit:'mph',direction:'higher',attempts:5,aggregation:'best',module:'baseball',retestDays:28},
+    // Pathways V1 sport-specific measured tests (no norms, thresholds,
+    // rankings, or readiness scores — athlete vs own history only).
+    '30m-sprint':{id:'30m-sprint',name:'30-Metre Sprint',domain:'acceleration',unit:'sec',direction:'lower',attempts:3,aggregation:'best',module:'soccer',retestDays:28},
+    't-test-agility':{id:'t-test-agility',name:'T-Test Agility',domain:'agility',unit:'sec',direction:'lower',attempts:2,aggregation:'best',module:'soccer',retestDays:28},
+    'vertical-jump':{id:'vertical-jump',name:'Vertical Jump',domain:'vertical_power',unit:'in',direction:'higher',attempts:3,aggregation:'best',module:'basketball',retestDays:28},
+    'lane-agility':{id:'lane-agility',name:'Lane Agility Drill',domain:'agility',unit:'sec',direction:'lower',attempts:2,aggregation:'best',module:'basketball',retestDays:28},
+    '40yd-dash':{id:'40yd-dash',name:'40-Yard Dash',domain:'acceleration',unit:'sec',direction:'lower',attempts:3,aggregation:'best',module:'football',retestDays:28}
   };
 
   const BATTERIES={
@@ -33,7 +40,14 @@
     // assessment is observation-only and is NOT an engine definition —
     // it has no numeric result; see server/assessment-battery.js.
     generalAthleticAssessment:['10yd-sprint','broad-jump','5-10-5-shuttle','push-ups','side-plank-r','side-plank-l','single-leg-balance-r','single-leg-balance-l','6min-walk-run'],
-    baseball:['throw-velo','throw-accuracy','exit-velo']
+    baseball:['throw-velo','throw-accuracy','exit-velo'],
+    // Pathways V1 sport batteries: additional measured tests only.
+    // The 8-test GAA core (generalAthleticAssessment) is shared by
+    // every sport; these entries are the sport-specific supplement.
+    soccer:['30m-sprint','t-test-agility'],
+    basketball:['vertical-jump','lane-agility'],
+    football:['40yd-dash','broad-jump','vertical-jump'],
+    flag_football:['40yd-dash','5-10-5-shuttle','30m-sprint']
   };
 
   function finite(values){return (values||[]).map(Number).filter(Number.isFinite);}
