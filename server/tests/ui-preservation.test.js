@@ -4,8 +4,15 @@
  *
  * 1. SHA-256 snapshot: the six shipped UI/source files must be byte-identical
  *    to tests/ui-preservation.snapshot.json (recorded 2026-11-11 from main
- *    commit dc5d42d). Any edit — intentional or accidental — fails loudly
- *    and must be reviewed, never silently absorbed.
+ *    commit dc5d42d; the assessment-engine.js hash was updated 2026-11-12
+ *    in a reviewed commit when the engine was intentionally extended to
+ *    v1.1.0 — new GAA definitions only, no existing definition changed;
+ *    the THE PROGRAM OS.html hash was updated 2026-11-14 in a reviewed
+ *    commit when the obsolete Assessments prototype content was removed
+ *    under Marcus's decision §14 — the only authorized HTML edit so far.
+ *    All other HTML files remain byte-identical to dc5d42d.) Any edit —
+ *    intentional or accidental — fails loudly and must be reviewed,
+ *    never silently absorbed.
  * 2. Structural presence: the modes and surfaces the owner listed as
  *    must-preserve still exist in the prototype source.
  * 3. No backend/billing code leaked into the UI files: reservations and
@@ -42,6 +49,13 @@ test('all owner-listed modes and surfaces still exist in the prototype', () => {
   assert.ok(index.includes('THE%20PROGRAM%20OS.html'), 'index.html still loads the prototype');
   assert.ok(index.includes('launch60-overrides.js'), 'index.html still loads overrides');
   assert.ok(index.includes('field-tested-drills.js'), 'index.html still loads field-tested drills');
+  // Phase 2 wiring (reviewed 2026-11-14): index.html also loads the
+  // assessment transport adapter + UI module before boot(). The
+  // prototype file itself is never edited; the UI module wraps
+  // vAssess/vAthlete at runtime.
+  assert.ok(index.includes('assessment-ui/assessment-client.js'), 'index.html loads the assessment transport adapter');
+  assert.ok(index.includes('assessment-ui/assessment-ui.js'), 'index.html loads the assessment UI module');
+  assert.ok(index.includes('AssessmentUI.createAssessmentUI'), 'index.html installs the assessment UI before boot');
 });
 
 test('no reservation, billing, or backend code leaked into UI files', () => {
