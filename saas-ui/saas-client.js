@@ -42,6 +42,26 @@
     'cancelSubscription', 'expireSubscription', 'listPlans',
     'sponsorAthlete', 'endSponsorship',
     'grantConsent', 'withdrawConsent', 'orgOverview',
+    // Athlete Pathways V1 (2026-11-26): owner management (G1/G2),
+    // prospect profiles + sharing (G3), recruitment CRM (G4),
+    // media links (G5), sport/goals/evaluations (G6). Same
+    // { method, params } dispatch as every method above.
+    // getPublicProfile is NOT here: it is unauthenticated and
+    // token-only, served by GET /api/public/profile (see below).
+    'ownerCreateAthlete', 'ownerListAthletes',
+    'grantComplimentary', 'revokeComplimentary',
+    'suspendAthlete', 'reactivateAthlete', 'updateAthleteRole',
+    'ownerInviteAthlete', 'listAudit',
+    'createProspectProfile', 'updateProspectProfile',
+    'approveProspectProfile', 'getProspectProfile',
+    'listProfileShares', 'createProfileShare', 'revokeProfileShare',
+    'createRecruitmentContact', 'updateRecruitmentContact',
+    'listRecruitmentContacts', 'createOpportunity',
+    'addRecruitmentNote', 'referAthlete', 'updateReferralStatus',
+    'addMediaLink', 'removeMediaLink', 'listMediaLinks',
+    'assignSport', 'setDevelopmentGoals', 'updateDevelopmentGoal',
+    'listDevelopmentGoals', 'recordScoutingEvaluation',
+    'listScoutingEvaluations',
   ];
 
   var BILLING_METHODS = [
@@ -67,6 +87,13 @@
       || endpoint.replace(/\/saas\/?$/, '/billing');
     var plansEndpoint = options.plansEndpoint
       || endpoint.replace(/\/?$/, '') + '/plans';
+    /* Public prospect-profile read (Pathways V1, G3): unauthenticated,
+     * token-only GET. The dev server hosts it at
+     * /api/public/profile?token=...; no dev-role headers, no JWT —
+     * the share token is the only credential, and the server returns
+     * only the approved public fields (never contact info). */
+    var publicEndpoint = options.publicEndpoint
+      || endpoint.replace(/\/saas\/?$/, '/public/profile');
     var fetchImpl = options.fetchImpl
       || (typeof fetch !== 'undefined' ? fetch.bind(typeof globalThis !== 'undefined' ? globalThis : this) : null);
     if (!fetchImpl) throw new Error('createSaasClient requires fetch (pass fetchImpl in Node <18).');
@@ -193,9 +220,39 @@
       return getPlans().then(function () { return true; }).catch(function () { return false; });
     }
 
+    /* Unauthenticated public profile read by share token. Returns
+     * { profile } (public fields only) or throws with the server's
+     * code (PROFILE_SHARE_INVALID / PROFILE_NOT_APPROVED /
+     * INVALID_INPUT). Never retries: a refused token is a final
+     * answer, and the refusal carries no athlete data. */
+    function getPublicProfile(token) {
+      if (!token) return Promise.reject(makeError('INVALID_INPUT', 'getPublicProfile requires a share token.'));
+      var url = publicEndpoint + '?token=' + encodeURIComponent(String(token));
+      return Promise.resolve()
+        .then(function () { return fetchImpl(url, { method: 'GET', headers: {} }); })
+        .catch(function (err) {
+          throw makeError('NETWORK_ERROR', 'Could not reach the SaaS service (' + (err && err.message ? err.message : 'network error') + ').');
+        })
+        .then(function (res) {
+          if (!res || typeof res.status !== 'number') throw makeError('INVALID_RESPONSE', 'SaaS service returned an unreadable response.');
+          return Promise.resolve()
+            .then(function () { return res.json(); })
+            .catch(function () { throw makeError('INVALID_RESPONSE', 'SaaS service returned HTTP ' + res.status + ' with an unreadable body.'); })
+            .then(function (payload) {
+              if (res.status >= 400 || !payload || payload.ok !== true) {
+                var e = (payload && payload.error) || {};
+                throw makeError(e.code || ('HTTP_' + res.status), e.message || ('SaaS service returned HTTP ' + res.status + '.'), e);
+              }
+              return payload.data;
+            });
+        });
+    }
+
     var client = {
       endpoint: endpoint, billingEndpoint: billingEndpoint, plansEndpoint: plansEndpoint,
+      publicEndpoint: publicEndpoint,
       call: call, billing: billing, getPlans: getPlans, probe: probe,
+      getPublicProfile: getPublicProfile,
       methods: SAAS_METHODS.slice(), billingMethods: BILLING_METHODS.slice(),
     };
     for (var i = 0; i < SAAS_METHODS.length; i++) {
