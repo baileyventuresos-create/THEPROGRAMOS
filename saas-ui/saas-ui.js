@@ -419,6 +419,42 @@
     return Number.isInteger(n) ? String(n) : String(Math.round(n * 100) / 100);
   }
 
+  /* Maintenance bands (seconds / inches / reps / metres) — the
+   * canonical per-test tolerances from server/assessment-battery.js
+   * (GAA entries + Pathways sport entries), mirrored here so the
+   * browser chart can classify a change exactly the way the
+   * canonical progress calculator does (server/progress.js
+   * compareValues). Keep this table in sync with that file: a band
+   * that drifts here re-opens the caption/calculator disagreement
+   * (validation F1, 2026-11-26). Unknown tests fall back to 0, the
+   * same fallback the calculator applies when a protocol entry
+   * carries no band. */
+  var MAINTENANCE_BANDS = {
+    '10yd-sprint': 0.05, 'broad-jump': 1, '5-10-5-shuttle': 0.05,
+    'push-ups': 1, 'side-plank-r': 3, 'side-plank-l': 3,
+    'single-leg-balance-r': 3, 'single-leg-balance-l': 3,
+    '6min-walk-run': 10,
+    '30m-sprint': 0.05, 't-test-agility': 0.05, 'vertical-jump': 1,
+    'lane-agility': 0.05, '40yd-dash': 0.05,
+  };
+
+  /* Canonical change status for one test, vs its baseline — the
+   * same rule as server/progress.js compareValues, in the same
+   * arithmetic order (raw = latest − baseline, then direction),
+   * because the order matters in floating point: 2.30 → 2.25 is
+   * −0.05 at the 10yd-sprint band edge only when computed this way
+   * (raw −0.04999… ≤ 0.05 → maintained); baseline − latest gives
+   * 0.05000…04 > 0.05 → improved, and would contradict the
+   * calculator. Do not "simplify" this. */
+  function trendStatusFor(testId, direction, baseline, latest) {
+    const raw = latest - baseline;
+    const dir = direction === 'lower' ? -1 : 1;
+    const improvement = raw * dir;
+    const band = MAINTENANCE_BANDS[testId] != null ? MAINTENANCE_BANDS[testId] : 0;
+    return Math.abs(improvement) <= band ? 'maintained'
+      : (improvement > 0 ? 'improved' : 'regressed');
+  }
+
   /* Group assessment sessions into per-test series for the chart.
    * sessions: [{completedAt, results:[{assessmentId, result, unit}]}]
    * (the shape athleteHistory returns). Returns one series per test
@@ -447,6 +483,12 @@
       s.personalBest = LOWER_BETTER_TESTS[id]
         ? Math.min.apply(null, vals) : Math.max.apply(null, vals);
       s.direction = LOWER_BETTER_TESTS[id] ? 'lower' : 'higher';
+      s.maintenanceBand = MAINTENANCE_BANDS[id] != null ? MAINTENANCE_BANDS[id] : 0;
+      /* Canonical status vs baseline (calculator rule, with the
+       * maintenance band) — the chart caption reads this, never a
+       * recomputed direction. Single-point series are baseline-only. */
+      s.status = s.points.length === 1 ? 'baseline-only'
+        : trendStatusFor(id, s.direction, s.baseline, s.latest);
       return s;
     });
   }
@@ -485,10 +527,15 @@
     const vsBase = series.points.length > 1
       ? (function () {
         const raw = series.latest - series.baseline;
-        const better = (series.direction === 'lower' ? -raw : raw) > 0;
-        const same = raw === 0;
+        /* Canonical status from the progress calculator's rule
+         * (maintenance band applied). Prefer the status the series
+         * already carries; recompute by the same rule for
+         * hand-built series that lack one. Numbers are untouched. */
+        const status = (series.status === 'improved' || series.status === 'maintained' || series.status === 'regressed')
+          ? series.status
+          : trendStatusFor(series.testId, series.direction, series.baseline, series.latest);
         return ' · vs baseline ' + (raw > 0 ? '+' : '') + fmtNum(raw) + ' ' + escLocal(series.unit || '')
-          + (same ? ' (maintained)' : better ? ' (improved)' : ' (regressed)');
+          + ' (' + status + ')';
       })()
       : ' · baseline only';
     return '<figure style="margin:0;border:1px solid var(--line);padding:10px;min-width:0">'
@@ -1157,17 +1204,30 @@
       + mediaListHtml(h, bundle.mediaLinks, null)
       + '<p class="small muted" style="margin:6px 0 0">Approved external video links only — no uploads, no storage. Embeds play only for YouTube and Vimeo links; everything else is a plain link.</p>';
     html += '<div class="eyebrow" style="margin-top:14px">Recruitment opportunities</div>';
-    const opps = bundle.opportunities || null;
-    if (!opps) {
-      html += '<p class="muted" style="margin:6px 0 0">Recruitment is managed by your coach — contacts, opportunities, and referrals live in the coach CRM, and your coach shares updates with you. (No athlete-facing recruitment list exists in the API yet.)</p>';
-    } else if (!opps.length) {
+    /* Server-backed (G1 fix): referrals and opportunities about
+     * this athlete, loaded via listReferrals / listOpportunities.
+     * Recruitment is still managed by the coach — this is a
+     * read-only view of the athlete's own pipeline. */
+    const opps = bundle.opportunities || [];
+    const refs = bundle.referrals || [];
+    if (!opps.length && !refs.length) {
       html += '<p class="muted" style="margin:6px 0 0">No recruitment opportunities yet.</p>';
     } else {
-      html += '<div class="tbl-wrap" style="margin-top:6px"><table class="t"><tr><th>Opportunity</th><th>Organization</th><th>Stage</th><th>Follow-up</th></tr>'
-        + opps.map(function (o) {
-          return '<tr><td>' + h.esc(o.title || o.type || '') + '</td><td>' + h.esc(o.organization || o.orgName || '—') + '</td>'
-            + '<td>' + h.esc(o.status || '—') + '</td><td class="small">' + (o.followUpDate ? fmtDate(o.followUpDate) : '—') + '</td></tr>';
-        }).join('') + '</table></div>';
+      if (opps.length) {
+        html += '<div class="tbl-wrap" style="margin-top:6px"><table class="t"><tr><th>Opportunity</th><th>Organization</th><th>Date</th><th>Notes</th></tr>'
+          + opps.map(function (o) {
+            return '<tr><td>' + h.esc(o.type || '') + '</td><td>' + h.esc(o.organization || o.orgName || '—') + '</td>'
+              + '<td class="small">' + (o.date ? fmtDate(o.date) : '—') + '</td><td class="small">' + h.esc(o.notes || '—') + '</td></tr>';
+          }).join('') + '</table></div>';
+      }
+      if (refs.length) {
+        html += '<div class="tbl-wrap" style="margin-top:6px"><table class="t"><tr><th>Referral</th><th>Organization</th><th>Stage</th><th>Outcome</th><th>Referred</th></tr>'
+          + refs.map(function (r) {
+            return '<tr><td class="small">Referred to recruiter</td><td>' + h.esc(r.organization || r.orgName || '—') + '</td>'
+              + '<td><span class="lbl v1">' + h.esc(r.status || '—') + '</span></td><td class="small">' + h.esc(r.outcome || '—') + '</td>'
+              + '<td class="small">' + (r.referredAt ? fmtDate(r.referredAt) : '—') + '</td></tr>';
+          }).join('') + '</table></div>';
+      }
     }
     const hist = state.history;
     html += '<div class="eyebrow" style="margin-top:14px">Progress trends</div>';
@@ -1385,7 +1445,8 @@
         }).join('') + '</select>')
       + '</div><div class="row" style="gap:8px;margin-top:8px;flex-wrap:wrap">'
       + '<button class="btn sm" data-sui="crm-contact-update" data-contact="' + h.esc(contact.id) + '">Update status</button></div>';
-    /* Opportunities (session-created; the API has no list method yet) */
+    /* Opportunities (server-backed: reloaded on open and after
+     * every change, so they survive a refresh) */
     html += '<div class="eyebrow" style="margin-top:12px">Opportunities</div>';
     if (!opps.length) {
       html += '<p class="muted" style="margin:6px 0 0">No opportunities recorded for this contact yet.</p>';
@@ -1444,8 +1505,8 @@
         + '</div><div class="row" style="gap:8px;margin-top:8px;flex-wrap:wrap">'
         + '<button class="btn sm solid" data-sui="crm-refer-add" data-contact="' + h.esc(contact.id) + '">Refer athlete</button></div>';
     }
-    html += '<p class="small muted" style="margin:8px 0 0">Opportunities, notes, and referrals shown here are the ones created in this session: '
-      + 'the API records them server-side but has no list method for them yet, so they are not reloaded on refresh. Contacts themselves reload from the server.</p>';
+    html += '<p class="small muted" style="margin:8px 0 0">Opportunities, notes, and referrals load from the server — '
+      + 'they are reloaded when this contact is opened and after every change, so they survive a refresh. Contacts themselves reload from the server.</p>';
     html += '</div>';
     return html;
   }
@@ -1853,6 +1914,9 @@
       }
       if (role === 'coach' || role === 'org_admin') {
         try { state.crmContacts = await client().listRecruitmentContacts({}); } catch (e) { state.crmContacts = null; }
+        /* A contact detail open across a refresh reloads from the
+         * server (G1 fix) instead of keeping session-only rows. */
+        if (state.crmContactId) await loadCrmContactDetail(state.crmContactId);
       }
     }
 
@@ -2273,13 +2337,31 @@
       const athleteId = (state.role && state.role.athleteId)
         || (state.entitlements && state.entitlements.athleteId) || null;
       if (!athleteId) { state.pathways = null; return; }
+      let bundle;
       try {
-        state.pathways = await client().getProspectProfile({ athleteId: athleteId });
+        bundle = await client().getProspectProfile({ athleteId: athleteId });
       } catch (e) {
-        /* No profile yet (INVALID_INPUT) or out of scope: the portal
-         * shows the honest empty state, never a fake profile. */
-        state.pathways = null;
+        /* No profile yet (INVALID_INPUT) or out of scope: start from
+         * an empty bundle — referrals/opportunities below may still
+         * exist, and the portal shows them without a fake profile. */
+        bundle = { profile: null, mediaLinks: [], scoutingEvaluations: [], developmentGoals: [] };
       }
+      /* Own recruitment pipeline (G1 fix): referrals and
+       * opportunities about this athlete, read from the server.
+       * A failed read leaves an empty list, never a fake row. */
+      let referrals = [];
+      try {
+        const r = await client().listReferrals({ athleteId: athleteId });
+        referrals = r.referrals || [];
+      } catch (e) { referrals = []; }
+      let opportunities = [];
+      try {
+        const o = await client().listOpportunities({ athleteId: athleteId });
+        opportunities = o.opportunities || [];
+      } catch (e) { opportunities = []; }
+      bundle.referrals = referrals;
+      bundle.opportunities = opportunities;
+      state.pathways = (bundle.profile || referrals.length || opportunities.length) ? bundle : null;
     }
 
     async function approveProfile(profileId, approval) {
@@ -2480,6 +2562,33 @@
 
     /* --- coach portal: recruitment CRM --- */
 
+    /* Server-backed contact detail (G1 fix): opportunities, notes,
+     * and referrals for one contact, reloaded from the API on open
+     * and after every change — never session-only rows. A failed
+     * read leaves empty lists (and surfaces the error), never stale
+     * or fake rows. */
+    async function loadCrmContactDetail(contactId) {
+      if (!contactId) {
+        state.crmActivity = { opportunities: [], notes: [], referrals: [] };
+        return;
+      }
+      try {
+        const [o, n, r] = await Promise.all([
+          client().listOpportunities({ contactId: contactId }),
+          client().listRecruitmentNotes({ contactId: contactId }),
+          client().listReferrals({ contactId: contactId }),
+        ]);
+        state.crmActivity = {
+          opportunities: o.opportunities || [],
+          notes: n.notes || [],
+          referrals: r.referrals || [],
+        };
+      } catch (e) {
+        fail(e);
+        state.crmActivity = { opportunities: [], notes: [], referrals: [] };
+      }
+    }
+
     async function addCrmContact() {
       state.error = null; state.notice = null;
       try {
@@ -2517,11 +2626,11 @@
     async function addCrmOpportunity(contactId) {
       state.error = null; state.notice = null;
       try {
-        const r = await client().createOpportunity({
+        await client().createOpportunity({
           contactId: contactId, type: val('sui-crm-opp-type') || 'tryout',
           date: toIsoDate(val('sui-crm-opp-date')), notes: val('sui-crm-opp-notes') || undefined,
         });
-        state.crmActivity.opportunities.push(r.opportunity);
+        await loadCrmContactDetail(contactId);
         state.notice = 'Opportunity recorded.';
       } catch (e) { fail(e); }
       rerender();
@@ -2536,7 +2645,7 @@
           contactId: contactId, body: body,
           followUpDate: toIsoDate(val('sui-crm-note-followup')),
         });
-        state.crmActivity.notes.push(r.note);
+        await loadCrmContactDetail(contactId);
         state.notice = 'Note added' + (r.note.followUpDate ? ' — follow-up ' + fmtDate(r.note.followUpDate) + '.' : '.');
       } catch (e) { fail(e); }
       rerender();
@@ -2548,7 +2657,7 @@
         const r = await client().referAthlete({
           contactId: contactId, athleteId: val('sui-crm-refer-athlete'),
         });
-        if (!r.alreadyReferred) state.crmActivity.referrals.push(r.referral);
+        await loadCrmContactDetail(contactId);
         state.notice = r.alreadyReferred ? 'That athlete is already referred to this contact.' : 'Athlete referred.';
       } catch (e) { fail(e); }
       rerender();
@@ -2560,8 +2669,7 @@
         const el = doc && doc.getElementById('sui-crm-ref-' + referralId);
         const status = el ? String(el.value || '').trim() : '';
         const r = await client().updateReferralStatus({ referralId: referralId, status: status });
-        const local = state.crmActivity.referrals.find(function (x) { return String(x.id) === String(referralId); });
-        if (local) local.status = r.referral.status;
+        if (state.crmContactId) await loadCrmContactDetail(state.crmContactId);
         state.notice = 'Referral status updated to ' + r.referral.status + '.';
       } catch (e) { fail(e); }
       rerender();
@@ -2627,7 +2735,10 @@
         'media-add': function () { return addMedia(t.getAttribute('data-profile')); },
         'media-remove': function () { return removeMedia(t.getAttribute('data-media')); },
         'crm-contact-add': function () { return addCrmContact(); },
-        'crm-contact-open': function () { state.crmContactId = t.getAttribute('data-contact'); rerender(); return Promise.resolve(); },
+        'crm-contact-open': function () {
+          state.crmContactId = t.getAttribute('data-contact');
+          return loadCrmContactDetail(state.crmContactId).then(function () { rerender(); });
+        },
         'crm-contact-close': function () { state.crmContactId = null; rerender(); return Promise.resolve(); },
         'crm-contact-update': function () { return updateCrmContact(t.getAttribute('data-contact')); },
         'crm-opp-add': function () { return addCrmOpportunity(t.getAttribute('data-contact')); },
@@ -2701,6 +2812,7 @@
       createShare: createShare, revokeShare: revokeShare,
       addMedia: addMedia, removeMedia: removeMedia,
       addCrmContact: addCrmContact, updateCrmContact: updateCrmContact,
+      loadCrmContactDetail: loadCrmContactDetail,
       addCrmOpportunity: addCrmOpportunity, addCrmNote: addCrmNote,
       addCrmReferral: addCrmReferral, updateCrmReferral: updateCrmReferral,
       helpers: helpers,
@@ -2734,6 +2846,8 @@
     formatKeyValueLines: formatKeyValueLines, embedUrlFor: embedUrlFor, mediaEmbedHtml: mediaEmbedHtml,
     TEST_LABELS: TEST_LABELS, fmtNum: fmtNum,
     trendSeriesFromAssessments: trendSeriesFromAssessments,
+    trendStatusFor: trendStatusFor,
+    MAINTENANCE_BANDS: MAINTENANCE_BANDS,
     renderTrendChart: renderTrendChart,
     renderTrendChartsFromAssessments: renderTrendChartsFromAssessments,
     renderDirector: renderDirector, renderAthletePathways: renderAthletePathways,

@@ -86,8 +86,14 @@ action writes an audit row via `store.audit()`.
 - **G4:** `createRecruitmentContact`, `updateRecruitmentContact`,
   `listRecruitmentContacts` (coach sees only own contacts; director
   sees all; filter by status/level/region/sport),
-  `createOpportunity`, `addRecruitmentNote`, `referAthlete`,
-  `updateReferralStatus`. No mass outreach, no contract negotiation,
+  `createOpportunity`, `listOpportunities` (by `contactId` and/or
+  `athleteId`; athletes read only contacts they were referred to),
+  `addRecruitmentNote`, `listRecruitmentNotes` (coach/director-only,
+  by `contactId`), `referAthlete`, `updateReferralStatus`,
+  `listReferrals` (by `contactId` and/or `athleteId`; athletes read
+  only their own referrals). List rows carry the contact's
+  `organization` so the athlete portal can name it without a
+  contacts read. No mass outreach, no contract negotiation,
   no agent functionality.
 - **G5:** `addMediaLink` (valid http(s) URL required; non-URLs and
   non-http(s) schemes refused), `removeMediaLink`, `listMediaLinks`.

@@ -91,9 +91,12 @@ const ALLOWED = {
   updateRecruitmentContact: ['coach', 'org_admin', 'director'],
   listRecruitmentContacts: ['coach', 'org_admin', 'director'],
   createOpportunity: ['coach', 'org_admin', 'director'],
+  listOpportunities: ['coach', 'org_admin', 'director', 'athlete'],
   addRecruitmentNote: ['coach', 'org_admin', 'director'],
+  listRecruitmentNotes: ['coach', 'org_admin', 'director'],
   referAthlete: ['coach', 'org_admin', 'director'],
   updateReferralStatus: ['coach', 'org_admin', 'director'],
+  listReferrals: ['coach', 'org_admin', 'director', 'athlete'],
   // Pathways V1 (G5): media links (URL-only).
   addMediaLink: ['coach', 'org_admin', 'director'],
   removeMediaLink: ['coach', 'org_admin', 'director'],
@@ -247,6 +250,22 @@ function createSaasApi({ store, billing = null, assessmentHistory = null } = {})
 
   function requireContactScope(auth, contact) {
     if (!inContactScope(auth, contact)) throw err('FORBIDDEN', 'Recruitment contact is outside your scope.');
+  }
+
+  /* CRM list reads (Pathways V1, G1 fix): opportunities, notes, and
+   * referrals are stored server-side and must be readable back.
+   * Enrichment: list rows carry the contact's `organization`
+   * (orgName) so the athlete portal can name the organization
+   * without a contacts read athletes are not allowed to make. */
+  function withContactOrg(row) {
+    const contact = row && row.contactId ? store.recruitmentContactById(row.contactId) : null;
+    return { ...row, organization: contact ? contact.orgName : null };
+  }
+
+  /* Contact ids an athlete was referred to — the athlete-visible
+   * slice of the pipeline. */
+  function referredContactIds(athleteId) {
+    return new Set(store.referralsForAthlete(athleteId).map(r => r.contactId));
   }
 
   function isValidUrl(url) {
@@ -1347,6 +1366,47 @@ function createSaasApi({ store, billing = null, assessmentHistory = null } = {})
       return { opportunity };
     },
 
+    listOpportunities(auth, params = {}) {
+      requireAuth(auth, 'listOpportunities');
+      let opps = [...store.recruitmentOpportunities];
+      if (params.contactId) {
+        const contact = requireContact(params.contactId);
+        if (auth.role === 'athlete') {
+          /* Athletes read only contacts they were referred to; a
+           * contact with no referral for them reads back empty,
+           * never an error that would leak its existence. */
+          const self = athleteSelfFor(auth);
+          if (!self || !referredContactIds(self.id).has(contact.id)) {
+            return { opportunities: [], count: 0 };
+          }
+        } else {
+          requireContactScope(auth, contact);
+        }
+        opps = opps.filter(o => o.contactId === contact.id);
+      }
+      if (params.athleteId) {
+        /* Athlete: self only. Coach/org_admin: an athlete in scope.
+         * Director: all. Cross-tenant reads are ATHLETE_NOT_FOUND,
+         * same as every other athlete-scoped list. */
+        requireScopeRead(auth, params.athleteId);
+        const allowed = referredContactIds(params.athleteId);
+        opps = opps.filter(o => allowed.has(o.contactId));
+      } else if (!params.contactId && auth.role !== 'director') {
+        if (auth.role === 'athlete') {
+          const self = athleteSelfFor(auth);
+          const allowed = self ? referredContactIds(self.id) : new Set();
+          opps = opps.filter(o => allowed.has(o.contactId));
+        } else {
+          opps = opps.filter(o => {
+            const c = store.recruitmentContactById(o.contactId);
+            return c && inContactScope(auth, c);
+          });
+        }
+      }
+      const rows = opps.map(withContactOrg);
+      return { opportunities: rows, count: rows.length };
+    },
+
     addRecruitmentNote(auth, params = {}) {
       requireAuth(auth, 'addRecruitmentNote');
       const now = params.now ?? Date.now();
@@ -1362,6 +1422,22 @@ function createSaasApi({ store, billing = null, assessmentHistory = null } = {})
       store.recruitmentNotes.push(note);
       store.audit(auth.authUserId, 'add_recruitment_note', { contactId: contact.id, noteId: note.id }, new Date(now).toISOString());
       return { note };
+    },
+
+    listRecruitmentNotes(auth, params = {}) {
+      requireAuth(auth, 'listRecruitmentNotes');
+      let notes = [...store.recruitmentNotes];
+      if (params.contactId) {
+        const contact = requireContact(params.contactId);
+        requireContactScope(auth, contact);
+        notes = notes.filter(n => n.contactId === contact.id);
+      } else if (auth.role !== 'director') {
+        notes = notes.filter(n => {
+          const c = store.recruitmentContactById(n.contactId);
+          return c && inContactScope(auth, c);
+        });
+      }
+      return { notes, count: notes.length };
     },
 
     referAthlete(auth, params = {}) {
@@ -1398,6 +1474,39 @@ function createSaasApi({ store, billing = null, assessmentHistory = null } = {})
       referral.updatedAt = new Date(now).toISOString();
       store.audit(auth.authUserId, 'update_referral_status', { referralId: referral.id, status: referral.status }, new Date(now).toISOString());
       return { referral };
+    },
+
+    listReferrals(auth, params = {}) {
+      requireAuth(auth, 'listReferrals');
+      let refs = [...store.referrals];
+      if (params.contactId) {
+        const contact = requireContact(params.contactId);
+        if (auth.role === 'athlete') {
+          /* Athletes read only their own referrals on a contact. */
+          const self = athleteSelfFor(auth);
+          refs = refs.filter(r => r.contactId === contact.id
+            && self && r.athleteId === self.id);
+        } else {
+          requireContactScope(auth, contact);
+          refs = refs.filter(r => r.contactId === contact.id);
+        }
+      }
+      if (params.athleteId) {
+        requireScopeRead(auth, params.athleteId);
+        refs = refs.filter(r => r.athleteId === params.athleteId);
+      } else if (!params.contactId && auth.role !== 'director') {
+        if (auth.role === 'athlete') {
+          const self = athleteSelfFor(auth);
+          refs = self ? refs.filter(r => r.athleteId === self.id) : [];
+        } else {
+          refs = refs.filter(r => {
+            const c = store.recruitmentContactById(r.contactId);
+            return c && inContactScope(auth, c);
+          });
+        }
+      }
+      const rows = refs.map(withContactOrg);
+      return { referrals: rows, count: rows.length };
     },
 
     /* --- Athlete Pathways V1 (G5): media links (URL-only) --- */

@@ -251,6 +251,9 @@ class MemorySaasStore {
   referralsForContact(contactId) {
     return this.referrals.filter(r => r.contactId === contactId);
   }
+  referralsForAthlete(athleteId) {
+    return this.referrals.filter(r => r.athleteId === athleteId);
+  }
 
   /* --- development goals / scouting evaluations (Pathways G6) --- */
   goalsForAthlete(athleteId) {
