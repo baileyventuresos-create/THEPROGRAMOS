@@ -197,16 +197,38 @@ function createSaasApi({ store, billing = null, assessmentHistory = null } = {})
   /* Public fields of a prospect profile — the ONLY fields a share
    * token ever exposes. Contact info, training notes, medical info,
    * and anything not listed here never leaves the server on a
-   * public read. */
-  function publicProfileView(profile) {
+   * public read.
+   *
+   * Athlete name (Marcus decision 2026-11-26): the name MAY appear
+   * on an authorized prospect profile, subject to athlete + coach
+   * approval (+ guardian consent if the athlete is a minor).
+   * Profiles stay private by default: the name is included ONLY
+   * when both approval timestamps are recorded and, for a minor,
+   * a granted guardian-consent row is live at read time. Consent
+   * withdrawn after approval hides the name again — the profile
+   * itself stays shareable, the name does not. The gate is
+   * re-checked on every public read, never cached at approval
+   * time, and reuses the existing approval/consent records — no
+   * new consent logic. */
+  function nameDisplayAllowed(profile, now) {
+    const athlete = store.athleteById(profile.athleteId);
+    if (!athlete) return false;
+    if (!profile.athleteApprovedAt || !profile.coachApprovedAt) return false;
+    if (isMinor(athlete, now) && !store.hasConsent(athlete.id)) return false;
+    return true;
+  }
+
+  function publicProfileView(profile, now = Date.now()) {
     const media = store.mediaLinksForProfile(profile.id).map(m => ({
       kind: m.kind, url: m.url, title: m.title || null,
     }));
     const evaluations = store.evaluationsForAthlete(profile.athleteId)
       .filter(e => e.coachApproved)
       .map(e => ({ body: e.body, approvedAt: e.approvedAt || null }));
+    const athlete = store.athleteById(profile.athleteId);
     return {
       profileId: profile.id,
+      athleteName: nameDisplayAllowed(profile, now) ? (athlete && athlete.name) || null : null,
       bio: profile.bio || null,
       primarySport: profile.primarySport || null,
       secondarySport: profile.secondarySport || null,
@@ -1275,7 +1297,7 @@ function createSaasApi({ store, billing = null, assessmentHistory = null } = {})
       }
       const profile = requireProfile(share.profileId);
       if (profile.status !== 'approved') throw err('PROFILE_NOT_APPROVED', 'Profile is not approved for sharing.');
-      return { profile: publicProfileView(profile) };
+      return { profile: publicProfileView(profile, now) };
     },
 
     /* --- Athlete Pathways V1 (G4): recruitment CRM --- */

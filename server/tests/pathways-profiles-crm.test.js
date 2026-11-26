@@ -108,6 +108,7 @@ test('public profile exposes only approved public fields', () => {
   const pub = api.getPublicProfile({ token, now: NOW });
   const p = pub.profile;
   assert.equal(p.bio, 'Fictional prospect.');
+  assert.equal(p.athleteName, 'Athlete A', 'adult with both approvals: name visible');
   assert.equal(p.primarySport, 'soccer');
   assert.deepEqual(p.positions, ['midfielder']);
   assert.equal(p.mediaLinks.length, 1);
@@ -116,6 +117,40 @@ test('public profile exposes only approved public fields', () => {
   assert.ok(!flat.includes('private@dev.invalid'), 'contact email never exposed');
   assert.ok(!flat.includes('555-0000'), 'contact phone never exposed');
   assert.ok(!('contactInfo' in p), 'no contactInfo key on the public view');
+});
+
+test('name display: minor with consent shows name; withdrawn consent hides it again', () => {
+  const { store, api, authA } = freshWorld();
+  const minor = api.registerAthlete({ authUserId: 'auth-minor', role: 'athlete' },
+    { email: 'minor@dev.invalid', name: 'Minor Athlete', age: 15, now: NOW });
+  api.grantConsent(DIRECTOR, { athleteId: minor.athlete.id, consentVersion: 'v1', now: NOW });
+  api.linkAthlete(authA, { athleteId: minor.athlete.id, now: NOW });
+  const profile = makeProfile(api, authA, minor.athlete.id);
+  const minorAuth = { authUserId: 'auth-minor', role: 'athlete' };
+  approveBoth(api, authA, minorAuth, profile.id);
+  const { token } = api.createProfileShare(authA, { profileId: profile.id, now: NOW });
+  assert.equal(api.getPublicProfile({ token, now: NOW }).profile.athleteName, 'Minor Athlete',
+    'minor with live guardian consent: name visible');
+  // Consent withdrawn after approval: the share still works, the
+  // name does not — the gate is re-checked on every public read.
+  api.withdrawConsent(DIRECTOR, { athleteId: minor.athlete.id, now: NOW });
+  assert.equal(store.hasConsent(minor.athlete.id), false);
+  const pub = api.getPublicProfile({ token, now: NOW });
+  assert.equal(pub.profile.athleteName, null, 'withdrawn consent hides the name');
+  assert.equal(pub.profile.bio, 'Fictional prospect.', 'other public fields still served');
+  assert.ok(!JSON.stringify(pub).includes('Minor Athlete'), 'name string nowhere in the payload');
+});
+
+test('name display: approval absent or revoked never leaks a name', () => {
+  const { api, athA, authA, athAuthA } = freshWorld();
+  const profile = makeProfile(api, authA, athA.athlete.id);
+  approveBoth(api, authA, athAuthA, profile.id);
+  const { token } = api.createProfileShare(authA, { profileId: profile.id, now: NOW });
+  assert.equal(api.getPublicProfile({ token, now: NOW }).profile.athleteName, 'Athlete A');
+  // Editing an approved profile re-opens it (approvals cleared):
+  // the public read refuses outright, so no name can leak.
+  api.updateProspectProfile(authA, { profileId: profile.id, bio: 'Edited bio.', now: NOW });
+  assert.equal(codeOf(() => api.getPublicProfile({ token, now: NOW })), 'PROFILE_NOT_APPROVED');
 });
 
 test('revoked and expired shares refuse; unapproved profiles cannot be shared', () => {

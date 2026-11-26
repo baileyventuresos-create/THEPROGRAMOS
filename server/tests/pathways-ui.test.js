@@ -470,6 +470,16 @@ test('public profile renders approved fields only; refusal leaks nothing', () =>
   assert.ok(!html.includes('secret@example.com'), 'contact email never rendered even if present');
   assert.ok(!html.includes('555-0000'), 'contact phone never rendered even if present');
 
+  // Name display: the server-sent athleteName is the heading when
+  // present; without it the page stays generic and names nothing.
+  const named = UI.renderPublicProfile({ ...pub, athleteName: 'Synthetic Athlete' }, h());
+  assert.ok(named.includes('Synthetic Athlete'), 'authorized name shown as heading');
+  assert.ok(!named.includes('<h1 class="disp" style="margin:8px 0">Prospect profile</h1>'),
+    'named heading replaces the generic one');
+  const unnamed = UI.renderPublicProfile({ ...pub, athleteName: null }, h());
+  assert.ok(unnamed.includes('Prospect profile</h1>'), 'no name: generic heading');
+  assert.ok(!unnamed.includes('Synthetic Athlete'), 'no name: nothing leaks');
+
   const refusal = UI.renderPublicRefusal(h());
   assert.ok(refusal.includes('not available'));
   assert.ok(!refusal.includes('Synthetic bio.'));

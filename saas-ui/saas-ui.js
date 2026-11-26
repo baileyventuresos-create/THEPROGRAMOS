@@ -1513,17 +1513,19 @@
 
   /* ---- public prospect profile (prospect.html) ---- */
 
-  /* Renders ONLY the server's public view (profileId, bio, sports,
-   * positions, measurements, accomplishments, playing history,
-   * verified metrics, availability, media links, coach-approved
-   * scouting evaluations). No name is ever shown: the public view
-   * carries none, and the UI never fetches one — the athlete's
-   * identity is not part of a share link. Contact info is never
+  /* Renders ONLY the server's public view (profileId, athleteName
+   * when name display is authorized, bio, sports, positions,
+   * measurements, accomplishments, playing history, verified
+   * metrics, availability, media links, coach-approved scouting
+   * evaluations). The name appears ONLY when the server sent it —
+   * athlete + coach approval (+ guardian consent if minor) — and
+   * the UI never fetches one itself. Contact info is never
    * rendered even if present in the object passed in. */
   function renderPublicProfile(pub, h) {
     const p = pub || {};
+    const heading = p.athleteName ? h.esc(p.athleteName) : 'Prospect profile';
     let html = '<div class="eyebrow">Prospect profile · ' + h.esc(sportLabel(p.primarySport)) + '</div>'
-      + '<h1 class="disp" style="margin:8px 0">Prospect profile</h1>'
+      + '<h1 class="disp" style="margin:8px 0">' + heading + '</h1>'
       + '<p class="muted" style="max-width:62ch">A coach-approved prospect profile from THE PROGRAM. '
       + 'Shared privately by link — profiles are private by default and shared only with athlete and coach approval.</p>'
       + '<div style="border:1px solid var(--line);background:var(--surface);padding:16px;margin:14px 0;max-width:320px">'
