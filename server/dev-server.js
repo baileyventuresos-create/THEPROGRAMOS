@@ -13,6 +13,17 @@
  *   POST /api/assessments         -> { method, params } dispatch onto
  *                                    server/assessment-api.js
  *                                    ({ ok:true, data } | { ok:false, error })
+ *   POST /api/saas, /api/billing  -> SaaS dispatch (saas-api.js /
+ *                                    billing.js); GET /api/saas/plans.
+ *   GET  /api/public/profile?token=... -> unauthenticated, token-only
+ *                                    public prospect-profile read
+ *                                    (saas-api.js getPublicProfile).
+ *                                    No auth of any kind: the share
+ *                                    token is the only credential, and
+ *                                    the server returns only the
+ *                                    approved public fields. A refused
+ *                                    token answers { ok:false } with no
+ *                                    athlete data.
  *
  * DEV ONLY — never expose this on a public host:
  *   - Binds 127.0.0.1 only. No TLS, no real auth: the caller names a
@@ -360,6 +371,20 @@ function createDevServer({ port = DEFAULT_PORT, root = ROOT, seed = true } = {})
           sendJson(res, 200, { ok: true, data });
         } catch (e) {
           sendJson(res, 200, { ok: false, error: { code: e.code || 'SAAS_ERROR', message: e.message, ...(e.coveringSource ? { coveringSource: e.coveringSource } : {}) } });
+        }
+        return;
+      }
+
+      if (req.method === 'GET' && url.pathname === '/api/public/profile') {
+        /* Token-only public read: no auth headers are read or
+         * required here. The share token is the only credential;
+         * getPublicProfile enforces share status, expiry, and the
+         * approved-profile gate, and returns public fields only. */
+        try {
+          const data = await saasApi.getPublicProfile(null, { token: url.searchParams.get('token') });
+          sendJson(res, 200, { ok: true, data });
+        } catch (e) {
+          sendJson(res, 200, { ok: false, error: { code: e.code || 'PROFILE_SHARE_INVALID', message: e.message } });
         }
         return;
       }

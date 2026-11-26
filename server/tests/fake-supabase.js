@@ -30,6 +30,7 @@
 const TABLES = [
   'app_users', 'coaches', 'athletes', 'cohorts', 'cohort_enrollments',
   'athlete_guardians', 'guardians',
+  'organizations', 'organization_memberships', 'coach_athlete_links',
   'assessment_sessions', 'assessment_results', 'assessment_derived_records',
   'assessment_drafts', 'assessment_schedules', 'assessment_deferrals',
   'development_plans',
@@ -123,6 +124,7 @@ const TOKEN_USERS = {
   'token-director': 'auth-director',
   'token-coach-marcus': 'auth-coach-marcus',
   'token-coach-other': 'auth-coach-other',
+  'token-org-admin': 'auth-org-admin',
   'token-parent-youth': 'parent-youth-uid',
   'token-athlete-wingback': 'athlete-wingback-uid',
   'token-athlete-youth': 'athlete-youth-uid',
@@ -162,6 +164,7 @@ function seedDirectoryTables(wingback, youth) {
       { id: 'app-director', role: 'director', auth_user_id: 'auth-director' },
       { id: 'app-coach-marcus', role: 'coach', auth_user_id: 'auth-coach-marcus' },
       { id: 'app-coach-other', role: 'coach', auth_user_id: 'auth-coach-other' },
+      { id: 'app-org-admin', role: 'org_admin', auth_user_id: 'auth-org-admin' },
       { id: 'app-parent-youth', role: 'parent', auth_user_id: 'parent-youth-uid' },
       { id: 'app-athlete-wingback', role: 'athlete', auth_user_id: 'athlete-wingback-uid' },
       { id: 'app-athlete-youth', role: 'athlete', auth_user_id: 'athlete-youth-uid' },
@@ -181,6 +184,24 @@ function seedDirectoryTables(wingback, youth) {
     );
     db.guardians.push({ id: 'guardian-youth', user_id: 'app-parent-youth' });
     db.athlete_guardians.push({ athlete_id: Y, guardian_id: 'guardian-youth' });
+    /* SaaS / Pathways scoping (migration 006). coach-other has NO
+     * cohort enrolment: any access he gains comes only from the
+     * active link to the wingback. The paused link to the youth
+     * grants nothing. The org admin administers org-yak only, so
+     * the wingback (linked in org-yak) is visible to them and the
+     * youth (linked in org-ell, paused in org-yak) is not. */
+    db.organizations.push(
+      { id: 'org-yak', kind: 'team', name: 'Yakima', slug: 'yakima', status: 'active' },
+      { id: 'org-ell', kind: 'team', name: 'Ellensburg', slug: 'ellensburg', status: 'active' },
+    );
+    db.coach_athlete_links.push(
+      { id: 'link-1', coach_id: 'coach-other', athlete_id: W, organization_id: 'org-yak', status: 'active' },
+      { id: 'link-2', coach_id: 'coach-other', athlete_id: Y, organization_id: 'org-yak', status: 'paused' },
+      { id: 'link-3', coach_id: 'coach-marcus', athlete_id: Y, organization_id: 'org-ell', status: 'active' },
+    );
+    db.organization_memberships.push(
+      { organization_id: 'org-yak', app_user_id: 'app-org-admin', org_role: 'org_admin', status: 'active' },
+    );
   };
 }
 

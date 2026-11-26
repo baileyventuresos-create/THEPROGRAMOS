@@ -189,16 +189,128 @@ const GAA_TESTS = [
   },
 ];
 
+/* Pathways V1 sport-specific protocol entries. Same shape as the
+ * GAA entries above: measured tests only, no norms, percentiles,
+ * rankings, or readiness scores. Each entry is a defensible,
+ * directly measurable test; the GAA core stays the shared baseline
+ * for every sport. */
+const SPORT_TESTS = [
+  {
+    id: '30m-sprint', name: '30-Metre Sprint', category: 'Acceleration',
+    domain: 'acceleration', kind: 'measured', definitionIds: ['30m-sprint'],
+    unit: 'sec', precision: 0.01, direction: 'lower', attempts: 3, aggregation: 'best',
+    maintenanceBand: 0.05, sports: ['soccer', 'flag_football'],
+    instructions: 'Start from a stationary standing stance behind the line, on the coach\'s signal sprint 30 metres through the finish line without slowing before it. Three attempts; the fastest counts. Rest at least 90 seconds between attempts.',
+    conditions: 'Flat, dry, non-slip surface, marked 30-metre course. Same surface and timing method every session; record the timing method in the session context.',
+    warmup: 'General dynamic warm-up (5–10 min) plus 2 submaximal build-up sprints at ~70% and ~90% effort.',
+    safety: 'Stop the test for pain, dizziness, or a pulled muscle. Athlete must be able to sprint without limping.',
+    validCriteria: ['Started stationary behind the line', 'Ran the full 30 metres without cutting the course', 'Timed from first movement to crossing the finish line'],
+    invalidCriteria: ['False start (movement before the signal)', 'Timing fault', 'Athlete slowed or stopped before the finish line'],
+    alternatives: {
+      youth: 'Same protocol. Younger athletes (9–12) use a standing start only; record start type.',
+      adult: 'Same protocol. Allow a longer warm-up and an extra build-up sprint.',
+      accommodations: ['Hand timing instead of gates (record method; do not mix methods within one athlete\'s history without noting it)'],
+    },
+  },
+  {
+    id: 't-test-agility', name: 'T-Test Agility', category: 'Agility',
+    domain: 'agility', kind: 'measured', definitionIds: ['t-test-agility'],
+    unit: 'sec', precision: 0.01, direction: 'lower', attempts: 2, aggregation: 'best',
+    maintenanceBand: 0.05, sports: ['soccer'],
+    instructions: 'Start at the base of the T. Sprint 10 yards forward to the middle cone, shuffle 5 yards left, shuffle 10 yards right, shuffle 5 yards back to the middle, then backpedal to the start. Two attempts; the fastest counts. Rest at least 90 seconds between attempts.',
+    conditions: 'Flat, dry, non-slip surface with cones marking the T (10 yards forward, 5 yards each side). Same surface and timing method every session.',
+    warmup: 'General dynamic warm-up plus lateral shuffles and 2 submaximal change-of-direction reps at ~70% effort.',
+    safety: 'Stop for ankle/knee pain or loss of footing. Athletes must be able to decelerate and change direction without limping.',
+    validCriteria: ['Touched each cone in order', 'Shuffled (no crossover running) on the lateral legs', 'Finished back through the start line'],
+    invalidCriteria: ['Missed a cone touch', 'Ran instead of shuffling on a lateral leg', 'Cut the pattern short', 'Timing fault'],
+    alternatives: {
+      youth: 'Same protocol. Younger athletes may walk the pattern once before timed attempts.',
+      adult: 'Same protocol. Athletes 40+ may take a longer rest (2 minutes) between attempts.',
+      accommodations: ['Verbal cue at each cone on a practice rep (not timed)'],
+    },
+  },
+  {
+    id: 'vertical-jump', name: 'Vertical Jump', category: 'Power',
+    domain: 'power', kind: 'measured', definitionIds: ['vertical-jump'],
+    unit: 'in', precision: 0.5, direction: 'higher', attempts: 3, aggregation: 'best',
+    maintenanceBand: 1, sports: ['basketball', 'football'],
+    instructions: 'Stand flat-footed under the measuring device, reach up and mark standing reach. Jump vertically with a countermovement and mark the highest point reached. Three attempts; the best jump height (mark minus standing reach) counts.',
+    conditions: 'Flat, dry, non-slip surface with a vertical-jump measuring device or marked wall. Same device and method every session.',
+    warmup: 'General dynamic warm-up plus 2 submaximal practice jumps at ~70% effort.',
+    safety: 'Land with soft knees; stop for knee/ankle pain or loss of balance on landing. Clear the landing area before each attempt.',
+    validCriteria: ['Standing reach measured before jumping', 'Two-foot take-off and landing', 'Highest mark recorded at the fingertips'],
+    invalidCriteria: ['Running start or step into the jump', 'Single-foot take-off', 'Standing reach re-measured between attempts'],
+    alternatives: {
+      youth: 'Same protocol. Younger athletes may jump from a marked line on a mat; record the surface.',
+      adult: 'Same protocol. Athletes with knee/ankle history use a soft landing surface and may reduce to 2 attempts with coach approval.',
+      accommodations: ['Landing mat instead of hard floor', 'Two attempts instead of three with coach approval (recorded as modified)'],
+    },
+  },
+  {
+    id: 'lane-agility', name: 'Lane Agility Drill', category: 'Agility',
+    domain: 'agility', kind: 'measured', definitionIds: ['lane-agility'],
+    unit: 'sec', precision: 0.01, direction: 'lower', attempts: 2, aggregation: 'best',
+    maintenanceBand: 0.05, sports: ['basketball'],
+    instructions: 'Start at the baseline corner of the lane. Sprint to the free-throw line, shuffle across the lane, backpedal to the baseline, shuffle back across, sprint to the free-throw line, shuffle across, and sprint back to the start. Two attempts; the fastest counts. Rest at least 90 seconds between attempts.',
+    conditions: 'Standard basketball court lane (12 ft wide, 19 ft from baseline to free-throw line). Same court and timing method every session.',
+    warmup: 'General dynamic warm-up plus lateral shuffles and 2 submaximal change-of-direction reps at ~70% effort.',
+    safety: 'Stop for ankle/knee pain or loss of footing. Athletes must be able to decelerate and change direction without limping.',
+    validCriteria: ['Touched each lane line in order', 'Shuffled on the lateral legs, sprinted/backpedalled on the straight legs', 'Finished through the start line'],
+    invalidCriteria: ['Missed a line touch', 'Ran instead of shuffling on a lateral leg', 'Cut the pattern short', 'Timing fault'],
+    alternatives: {
+      youth: 'Same protocol. Younger athletes may walk the pattern once before timed attempts.',
+      adult: 'Same protocol. Athletes 40+ may take a longer rest (2 minutes) between attempts.',
+      accommodations: ['Verbal cue at each line on a practice rep (not timed)'],
+    },
+  },
+  {
+    id: '40yd-dash', name: '40-Yard Dash', category: 'Acceleration',
+    domain: 'acceleration', kind: 'measured', definitionIds: ['40yd-dash'],
+    unit: 'sec', precision: 0.01, direction: 'lower', attempts: 3, aggregation: 'best',
+    maintenanceBand: 0.05, sports: ['football', 'flag_football'],
+    instructions: 'Start from a stationary 3-point or standing stance behind the line, on the coach\'s signal sprint 40 yards through the finish line without slowing before it. Three attempts; the fastest counts. Rest at least 2 minutes between attempts.',
+    conditions: 'Flat, dry, non-slip surface, marked 40-yard course. Same surface and timing method every session; record the timing method and start stance in the session context.',
+    warmup: 'General dynamic warm-up (5–10 min) plus 2 submaximal build-up sprints at ~70% and ~90% effort.',
+    safety: 'Stop the test for pain, dizziness, or a pulled muscle. Athlete must be able to sprint without limping.',
+    validCriteria: ['Started stationary behind the line', 'Ran the full 40 yards without cutting the course', 'Timed from first movement to crossing the finish line'],
+    invalidCriteria: ['False start (movement before the signal)', 'Timing fault', 'Athlete slowed or stopped before the finish line'],
+    alternatives: {
+      youth: 'Same protocol. Younger athletes use a standing start only; record start type.',
+      adult: 'Same protocol. Allow a longer warm-up and an extra build-up sprint.',
+      accommodations: ['Hand timing instead of gates (record method; do not mix methods within one athlete\'s history without noting it)', 'Standing start instead of 3-point stance for athletes who cannot hold the stance safely'],
+    },
+  },
+];
+
+/* Sport-specific supplement to the shared GAA core: definition ids
+ * per sport (mirrors the engine BATTERIES.<sport> entries). */
+const SPORT_BATTERIES = {
+  baseball: ['throw-velo', 'throw-accuracy', 'exit-velo'],
+  soccer: ['30m-sprint', 't-test-agility'],
+  basketball: ['vertical-jump', 'lane-agility'],
+  football: ['40yd-dash', 'broad-jump', 'vertical-jump'],
+  flag_football: ['40yd-dash', '5-10-5-shuttle', '30m-sprint'],
+};
+const SPORTS = Object.keys(SPORT_BATTERIES);
+
+function sportTestsFor(sport) {
+  const ids = SPORT_BATTERIES[sport];
+  if (!ids) throw new Error('Unknown sport: ' + sport);
+  return SPORT_TESTS.filter(t => ids.includes(t.id));
+}
+
 const GAA_DEFINITION_IDS = GAA_TESTS.flatMap(t => t.definitionIds);
 const GAA_MEASURED_IDS = GAA_TESTS.filter(t => t.kind === 'measured').flatMap(t => t.definitionIds);
 
 function protocolFor(id) {
-  const test = GAA_TESTS.find(t => t.id === id || t.definitionIds.includes(id));
+  const test = GAA_TESTS.find(t => t.id === id || t.definitionIds.includes(id))
+    || SPORT_TESTS.find(t => t.id === id || t.definitionIds.includes(id));
   if (!test) throw new Error('Unknown GAA test: ' + id);
   return test;
 }
 function isMeasured(id) {
-  const test = GAA_TESTS.find(t => t.id === id || t.definitionIds.includes(id));
+  const test = GAA_TESTS.find(t => t.id === id || t.definitionIds.includes(id))
+    || SPORT_TESTS.find(t => t.id === id || t.definitionIds.includes(id));
   if (!test) throw new Error('Unknown GAA test: ' + id);
   return test.kind === 'measured';
 }
@@ -247,5 +359,6 @@ function accommodationsFor(id, { age } = {}) {
 module.exports = {
   PROTOCOL_VERSION, BATTERY_ID, RETEST_DAYS, APPROACHING_WINDOW_DAYS,
   GAA_TESTS, GAA_DEFINITION_IDS, GAA_MEASURED_IDS,
+  SPORT_TESTS, SPORT_BATTERIES, SPORTS, sportTestsFor,
   protocolFor, isMeasured, validateAttempts, ageBandFor, accommodationsFor,
 };

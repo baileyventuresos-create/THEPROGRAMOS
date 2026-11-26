@@ -65,6 +65,16 @@ test('all owner-listed modes and surfaces still exist in the prototype', () => {
   assert.ok(index.includes('saas-ui/saas-client.js'), 'index.html loads the SaaS transport adapter');
   assert.ok(index.includes('saas-ui/saas-ui.js'), 'index.html loads the SaaS UI module');
   assert.ok(index.includes('SaasUI.createSaasUI'), 'index.html installs the SaaS UI before boot');
+  // Production auth wiring (reviewed 2026-11-26): index.html also
+  // loads the Supabase Auth client (+ its gitignored config) before
+  // boot(), detects localhost, and passes { dev, auth } to both UIs
+  // so the dev "View as" switcher exists only on localhost. The
+  // index.html hash was updated in the reviewed snapshot commit for
+  // this loader-only change (old 2e437ce2…, new 60ea056c…).
+  assert.ok(index.includes('saas-ui/supabase-config.js'), 'index.html loads the Supabase client config');
+  assert.ok(index.includes('saas-ui/supabase-auth.js'), 'index.html loads the Supabase Auth client');
+  assert.ok(index.includes('dev:__isLocal'), 'index.html passes localhost detection to the UIs');
+  assert.ok(index.includes('auth:__auth'), 'index.html passes the Auth client to the UIs');
 });
 
 test('no reservation, billing, or backend code leaked into UI files', () => {

@@ -97,6 +97,9 @@ test('migrations 002 + 004 seed exactly the engine definitions (V1 in 002, GAA i
   const path = require('node:path');
   const sql002 = fs.readFileSync(path.join(__dirname, '..', 'migrations', '002_assessment_persistence.sql'), 'utf8');
   const sql004 = fs.readFileSync(path.join(__dirname, '..', 'migrations', '004_assessment_reassessment.sql'), 'utf8');
+  // Pathways V1 (2026-11-26): the five sport definitions are seeded
+  // by migration 009, same pattern, engine still the source of truth.
+  const sql009 = fs.readFileSync(path.join(__dirname, '..', 'migrations', '009_athlete_pathways.sql'), 'utf8');
   const v1 = ['10yd-sprint', 'broad-jump', 'rotational-scoop-r', 'rotational-scoop-l',
     'push-ups', 'side-plank-r', 'side-plank-l', 'throw-velo', 'throw-accuracy', 'exit-velo'];
   const gaa = ['5-10-5-shuttle', 'single-leg-balance-r', 'single-leg-balance-l',
@@ -104,7 +107,7 @@ test('migrations 002 + 004 seed exactly the engine definitions (V1 in 002, GAA i
   for (const id of v1) assert.ok(sql002.includes(`('${id}'`), `migration 002 seeds ${id}`);
   for (const id of gaa) assert.ok(sql004.includes(`('${id}'`), `migration 004 seeds ${id}`);
   for (const id of Object.keys(Engine.definitions)) {
-    assert.ok(sql002.includes(`('${id}'`) || sql004.includes(`('${id}'`), `a migration seeds ${id}`);
+    assert.ok(sql002.includes(`('${id}'`) || sql004.includes(`('${id}'`) || sql009.includes(`('${id}'`), `a migration seeds ${id}`);
   }
   assert.match(sql002, /kind TEXT NOT NULL CHECK \(kind IN \('observation','interpretation'\)\)/);
   assert.match(sql002, /attempts JSONB NOT NULL/);

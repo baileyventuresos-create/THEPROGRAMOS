@@ -42,6 +42,14 @@ interface WorkflowBundle {
   createAccessDirectory: (opts: {
     athletes: unknown[];
     coachAuth: Record<string, string>;
+    /* SaaS / Pathways scoping (migration 006), built by
+     * directory.ts: active coach-athlete links grant the linked
+     * coach assess/view scope, and org memberships let org_admins
+     * view athletes linked inside orgs they admin. The bundled
+     * createAccessDirectory (server/assessment-access.js) filters
+     * on status, so the rows pass through as stored. */
+    links?: unknown[];
+    orgMemberships?: unknown[];
   }) => unknown;
   // GAA battery protocol (server/assessment-battery.js, re-exported
   // by entry.mjs). Present only in bundles generated after the
@@ -119,6 +127,8 @@ export async function loadWorkflow(
   const accessDirectory = bundle.createAccessDirectory({
     athletes: directory.athletes,
     coachAuth: directory.coachAuth,
+    links: directory.links,
+    orgMemberships: directory.orgMemberships,
   });
   return bundle.createAssessmentWorkflow({
     store: stores.store,

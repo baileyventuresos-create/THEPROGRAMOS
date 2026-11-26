@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Prospect profile — THE PROGRAM</title>
+<meta name="description" content="A coach-approved prospect profile from THE PROGRAM, shared privately by link. Profiles are private by default and shared only with athlete and coach approval.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=Public+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap">
+<style>
+/* Public prospect profile — standalone static page.
+ * Design tokens mirror homepage.html / THE PROGRAM OS.html so the
+ * public face and the product read as one system. No border-radius,
+ * no shadows, no gradients; 1px hairlines and square corners.
+ * No login, no auth state: the share token in the URL is the only
+ * credential. The page renders ONLY what the server's token-only
+ * public read returns (approved public fields); a refused token
+ * renders a neutral refusal with no athlete data. */
+:root{
+  --bg:#ECEEED; --surface:#F8F9F8; --sunk:#E2E5E3; --ink:#121514; --muted:#59625E; --line:#C7CDCA; --line-strong:#9AA39F;
+  --tape:#F2C300; --tape-ink:#121514; --side:#121514; --side-ink:#ECEEED; --side-muted:#8E9893;
+  --ok:#2B7349;
+  --display:"Archivo","Arial Narrow","Helvetica Neue",Arial,sans-serif;
+  --body:"Public Sans","Helvetica Neue",Arial,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#0E1110; --surface:#161A19; --sunk:#1D2221; --ink:#E7EBE9; --muted:#97A29D; --line:#2A312F; --line-strong:#46504C;
+  --ok:#5FC98D; color-scheme:dark }}
+:root[data-theme="dark"]{
+  --bg:#0E1110; --surface:#161A19; --sunk:#1D2221; --ink:#E7EBE9; --muted:#97A29D; --line:#2A312F; --line-strong:#46504C;
+  --ok:#5FC98D; color-scheme:dark }
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased}
+a{color:inherit}
+.wrap{max-width:1080px;margin:0 auto;padding:0 20px}
+.disp{font-family:var(--display);font-stretch:72%;font-weight:850;text-transform:uppercase;letter-spacing:.005em;line-height:.95;text-wrap:balance}
+.eyebrow{font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.muted{color:var(--muted)}
+.small{font-size:12.5px}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.testbar{background:var(--tape);color:var(--tape-ink);font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;padding:6px 20px;text-align:center}
+.topbar{display:flex;align-items:center;gap:16px;padding:12px 20px;border-bottom:1px solid var(--line);background:var(--surface);flex-wrap:wrap}
+.brand{display:flex;align-items:baseline;gap:10px}
+.brand .wm{font-family:var(--display);font-stretch:62%;font-weight:900;font-size:24px;line-height:1}
+.brand .wm span{display:inline-block;background:var(--ink);color:var(--bg);padding:1px 5px 0;margin-right:3px}
+.brand .tag{font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--muted)}
+.nav{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--ink);background:transparent;padding:8px 14px;font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;line-height:1.2;text-decoration:none}
+.btn:hover{background:var(--sunk)}
+.btn.solid{background:var(--ink);color:var(--bg)}
+.btn.tape{background:var(--tape);color:var(--tape-ink);border-color:var(--tape)}
+.btn.ghost{border-color:var(--line-strong)}
+.btn.sm{padding:4px 8px;font-size:10px}
+main{padding:28px 0 40px}
+main h1{font-size:clamp(30px,5vw,48px);margin:8px 0 10px}
+.lbl{display:inline-block;font-family:var(--mono);font-size:9.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;padding:2px 6px;border:1px solid currentColor}
+.lbl.ok{color:var(--ok)}
+.lbl.v1{color:var(--ink)}
+.note{border:1px solid var(--line);background:var(--sunk);padding:10px 14px;font-size:13px;margin:14px 0}
+.grid{display:grid;gap:16px}
+.g2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.tbl-wrap{overflow-x:auto}
+table.t{width:100%;border-collapse:collapse;font-size:13px}
+table.t th{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);text-align:left;padding:8px 10px;border-bottom:1px solid var(--line-strong)}
+table.t td{padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+.stack{display:flex;flex-direction:column}
+.row{display:flex;align-items:center}
+footer{border-top:1px solid var(--line);padding:24px 0 40px;color:var(--muted);font-size:13px}
+@media (max-width:760px){
+  .g2{grid-template-columns:minmax(0,1fr)}
+  main{padding:20px 0 32px}
+}
+</style>
+</head>
+<body>
+<div class="testbar">Shared privately by link — prospect profiles are private by default.</div>
+<header class="topbar">
+  <div class="brand"><span class="wm"><span>THE</span>PROGRAM</span><span class="tag">PLAY WITH PURPOSE.</span></div>
+  <nav class="nav" aria-label="Primary">
+    <a class="btn ghost" href="./homepage.html">About The Program</a>
+    <a class="btn" href="./index.html">Open the app</a>
+  </nav>
+</header>
+
+<main class="wrap">
+  <div id="profile" aria-live="polite">
+    <p class="muted">Loading profile…</p>
+  </div>
+  <noscript><p class="muted">This profile is not available without JavaScript — prospect profiles are private by default and load only with a valid share link.</p></noscript>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="brand" style="margin-bottom:8px"><span class="wm" style="font-size:18px"><span>THE</span>PROGRAM</span><span class="tag">PLAY WITH PURPOSE.</span></div>
+    <p>Assessment results are coach-recorded measurements from an unvalidated field battery. Training assignments are
+      always coach-authored; assessment scores never auto-prescribe training. Guardian consent is required before
+      remote features activate for minor athletes.</p>
+  </div>
+</footer>
+
+<script src="./saas-ui/saas-ui.js"></script>
+<script>
+(function () {
+  'use strict';
+  var el = document.getElementById('profile');
+  function h() {
+    return { esc: window.SaasUI.esc, lbl: null, athleteName: function (id) { return String(id); } };
+  }
+  function refuse() {
+    el.innerHTML = window.SaasUI.renderPublicRefusal(h());
+  }
+  if (!window.SaasUI || typeof window.SaasUI.renderPublicProfile !== 'function') {
+    el.innerHTML = '<p class="muted">This profile is not available.</p>';
+    return;
+  }
+  var token = null;
+  try { token = new URLSearchParams(window.location.search).get('token'); } catch (e) { token = null; }
+  if (!token) { refuse(); return; }
+  /* Token-only public read: no login, no headers. Any refusal —
+   * invalid, expired, revoked, or unapproved — renders the same
+   * neutral refusal with no athlete data. */
+  fetch('./api/public/profile?token=' + encodeURIComponent(token))
+    .then(function (r) { return r.json(); })
+    .then(function (payload) {
+      if (payload && payload.ok && payload.data && payload.data.profile) {
+        el.innerHTML = window.SaasUI.renderPublicProfile(payload.data.profile, h());
+      } else {
+        refuse();
+      }
+    })
+    .catch(function () { refuse(); });
+})();
+</script>
+</body>
+</html>

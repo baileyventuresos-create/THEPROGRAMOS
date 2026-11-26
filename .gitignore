@@ -151,3 +151,9 @@ vite.config.ts.timestamp-*
 # THE PROGRAM OS — generated Edge Function workflow bundle (do not commit;
 # regenerate with `node supabase/functions/assessment-api/build.mjs`).
 supabase/functions/assessment-api/vendor/
+
+# THE PROGRAM OS — Supabase client config with the live project's
+# anon (publishable) key. Copy saas-ui/supabase-config.example.js to
+# saas-ui/supabase-config.js and fill in; the filled-in file is local
+# only and never committed. The service_role key is never stored here.
+saas-ui/supabase-config.js

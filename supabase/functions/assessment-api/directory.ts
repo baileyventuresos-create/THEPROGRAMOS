@@ -8,6 +8,10 @@
 //              guardianUserIds: [app_users.auth_user_id...],
 //              authUserId: <the athlete's own Supabase Auth UID or null> }
 //   coachAuth: { [authUserId]: coachId }
+//   links: [{ coachId, athleteId, organizationId, status }]
+//          — active coach-athlete links from migration 006
+//   orgMemberships: [{ authUserId, organizationId, orgRole, status }]
+//          — organization memberships from migration 006
 //
 // Every value comes from the database via the USER-scoped client, so
 // RLS applies to these reads too (a coach only ever sees their own
@@ -29,6 +33,18 @@
 //   - athlete.authUserId: app_users.auth_user_id for the athlete's
 //                  athletes.app_user_id (the athlete half of
 //                  public.is_my_athlete()).
+//   - links[]:     coach_athlete_links (migration 006) — the SaaS
+//                  roster. An ACTIVE link grants the linked coach
+//                  assess/view scope exactly like a cohort enrolment
+//                  does; a paused/ended link grants nothing. The
+//                  access module filters on status, so rows are
+//                  passed through as stored, never pre-filtered here.
+//   - orgMemberships[]: organization_memberships (migration 006)
+//                  joined to app_users for the member's Auth UID.
+//                  An ACTIVE org_admin membership lets that user view
+//                  (never assess) athletes linked inside the org.
+//                  Rows whose member has no Auth UID are dropped —
+//                  they cannot be attributed to a caller.
 //
 // RESOLVED (Phase 3, 2026-11-14) — adult athletes: migration 005
 // (server/migrations/005_unified_athlete_age_and_result_flags.sql)
@@ -57,6 +73,26 @@ export interface DirectoryRow {
   athletes: DirectoryAthlete[];
   coachAuth: Record<string, string>;
   byId: Map<string, DirectoryAthlete>;
+  /* SaaS / Pathways scoping (migration 006). Shapes match what
+   * server/assessment-access.js createAccessDirectory expects:
+   * links are filtered on status='active' there; memberships are
+   * matched on the member's Auth UID. */
+  links: DirectoryLink[];
+  orgMemberships: DirectoryOrgMembership[];
+}
+
+export interface DirectoryLink {
+  coachId: string;
+  athleteId: string;
+  organizationId: string;
+  status: string;
+}
+
+export interface DirectoryOrgMembership {
+  authUserId: string;
+  organizationId: string;
+  orgRole: string;
+  status: string;
 }
 
 // Rows coming back from PostgREST are untyped (no generated Database
@@ -64,7 +100,7 @@ export interface DirectoryRow {
 type DbRow = Record<string, unknown>;
 
 function isRole(value: unknown): value is Role {
-  return value === "director" || value === "coach" || value === "parent" || value === "athlete";
+  return value === "director" || value === "coach" || value === "parent" || value === "athlete" || value === "org_admin";
 }
 
 export async function buildDirectory(
@@ -113,13 +149,19 @@ export async function buildDirectory(
 
   // 4. Directory rows, from the tables RLS already scopes to the caller.
   const [{ data: athletes }, { data: enrollments }, { data: cohorts },
-    { data: links }, { data: guardians }, { data: guardianUsers }] = await Promise.all([
+    { data: links }, { data: guardians }, { data: guardianUsers },
+    { data: saasLinks }, { data: saasMemberships }] = await Promise.all([
     supabase.from("athletes").select("id, age_years, app_user_id"),
     supabase.from("cohort_enrollments").select("athlete_id, cohort_id, status").eq("status", "enrolled"),
     supabase.from("cohorts").select("id, head_coach_id"),
     supabase.from("athlete_guardians").select("athlete_id, guardian_id"),
     supabase.from("guardians").select("id, user_id"),
     supabase.from("app_users").select("id, auth_user_id"),
+    // SaaS / Pathways scoping (migration 006): the coach-athlete
+    // roster links and the org memberships. RLS scopes these rows
+    // to the caller, exactly like the tables above.
+    supabase.from("coach_athlete_links").select("coach_id, athlete_id, organization_id, status"),
+    supabase.from("organization_memberships").select("organization_id, app_user_id, org_role, status"),
   ]);
 
   const headCoachByCohort = new Map<string, string>();
@@ -164,12 +206,37 @@ export async function buildDirectory(
   const coachAuth: Record<string, string> = {};
   if (coachId) coachAuth[authUid] = coachId;
 
+  // SaaS links pass through as stored (status included); the access
+  // module grants scope only on status='active'. Memberships are
+  // keyed by the member's Auth UID; rows without one are dropped.
+  const directoryLinks: DirectoryLink[] = (saasLinks ?? []).map((l: DbRow) => ({
+    coachId: String(l.coach_id),
+    athleteId: String(l.athlete_id),
+    organizationId: String(l.organization_id),
+    status: String(l.status),
+  }));
+  const directoryMemberships: DirectoryOrgMembership[] = (saasMemberships ?? [])
+    .map((m: DbRow) => {
+      const uid = authUidByAppUser.get(String(m.app_user_id));
+      return uid
+        ? {
+          authUserId: uid,
+          organizationId: String(m.organization_id),
+          orgRole: String(m.org_role),
+          status: String(m.status),
+        }
+        : null;
+    })
+    .filter((m): m is DirectoryOrgMembership => m !== null);
+
   return {
     auth,
     directory: {
       athletes: rows,
       coachAuth,
       byId: new Map(rows.map((a) => [a.id, a])),
+      links: directoryLinks,
+      orgMemberships: directoryMemberships,
     },
   };
 }

@@ -15,9 +15,10 @@
  *
  * Sponsored-athlete protection lives here, not in Stripe:
  * createCheckoutSession for an athlete first resolves entitlements;
- * an athlete already covered by an in-person membership or an
- * active sponsorship is refused with ALREADY_COVERED (covering
- * source named) — double-charging is impossible through this API.
+ * an athlete already covered by a complimentary grant, an in-person
+ * membership, or an active sponsorship is refused with
+ * ALREADY_COVERED (covering source named) — double-charging is
+ * impossible through this API.
  *
  * No secrets in code or logs. Provider ids are test-mode ids only.
  */
@@ -41,6 +42,7 @@ function periodEndFor(interval, fromMs) {
  * athlete must NOT be sold a subscription, else null. */
 function athleteCoverageBlock(store, athleteId, now) {
   const ent = resolveAthleteEntitlements(store, athleteId, now);
+  if (ent.tier === 'complimentary') return { code: 'ALREADY_COVERED', source: 'complimentary_grant', entitlements: ent };
   if (ent.tier === 'member') return { code: 'ALREADY_COVERED', source: 'in_person_membership', entitlements: ent };
   if (ent.tier === 'sponsored') return { code: 'ALREADY_COVERED', source: 'sponsorship', entitlements: ent };
   return null;

@@ -37,7 +37,7 @@
 'use strict';
 
 const { createHash, randomBytes } = require('node:crypto');
-const { isValidGameId, isAssignableGameId, BUILDS } = require('./saas-store');
+const { isValidGameId, isAssignableGameId, BUILDS, PROGRAM_INTERNAL_ORG_ID } = require('./saas-store');
 const {
   resolveAthleteEntitlements, resolveCoachEntitlements, resolveOrgEntitlements,
   subscriptionGrantsAccess,
@@ -67,10 +67,60 @@ const ALLOWED = {
   expireSubscription: ['director'],
   mySubscription: ['coach', 'org_admin', 'director', 'athlete'],
   listPlans: ['coach', 'org_admin', 'director', 'parent', 'athlete'],
+  // Athlete Pathways V1 (G1/G2): director-only owner management.
+  ownerCreateAthlete: ['director'],
+  ownerListAthletes: ['director'],
+  grantComplimentary: ['director'],
+  revokeComplimentary: ['director'],
+  suspendAthlete: ['director'],
+  reactivateAthlete: ['director'],
+  updateAthleteRole: ['director'],
+  ownerInviteAthlete: ['director'],
+  listAudit: ['director'],
+  // Pathways V1 (G3): prospect profiles + sharing.
+  createProspectProfile: ['coach', 'org_admin', 'director', 'athlete'],
+  updateProspectProfile: ['coach', 'org_admin', 'director', 'athlete'],
+  approveProspectProfile: ['coach', 'org_admin', 'director', 'athlete'],
+  getProspectProfile: ['coach', 'org_admin', 'director', 'parent', 'athlete'],
+  listProfileShares: ['coach', 'org_admin', 'director'],
+  createProfileShare: ['coach', 'org_admin', 'director'],
+  revokeProfileShare: ['coach', 'org_admin', 'director'],
+  // getPublicProfile is unauthenticated (token-only) — NOT in ALLOWED.
+  // Pathways V1 (G4): recruitment CRM.
+  createRecruitmentContact: ['coach', 'org_admin', 'director'],
+  updateRecruitmentContact: ['coach', 'org_admin', 'director'],
+  listRecruitmentContacts: ['coach', 'org_admin', 'director'],
+  createOpportunity: ['coach', 'org_admin', 'director'],
+  listOpportunities: ['coach', 'org_admin', 'director', 'athlete'],
+  addRecruitmentNote: ['coach', 'org_admin', 'director'],
+  listRecruitmentNotes: ['coach', 'org_admin', 'director'],
+  referAthlete: ['coach', 'org_admin', 'director'],
+  updateReferralStatus: ['coach', 'org_admin', 'director'],
+  listReferrals: ['coach', 'org_admin', 'director', 'athlete'],
+  // Pathways V1 (G5): media links (URL-only).
+  addMediaLink: ['coach', 'org_admin', 'director'],
+  removeMediaLink: ['coach', 'org_admin', 'director'],
+  listMediaLinks: ['coach', 'org_admin', 'director', 'parent', 'athlete'],
+  // Pathways V1 (G6): sport assignment, goals, scouting evaluations.
+  assignSport: ['coach', 'director'],
+  setDevelopmentGoals: ['coach', 'director'],
+  updateDevelopmentGoal: ['coach', 'director'],
+  listDevelopmentGoals: ['coach', 'org_admin', 'director', 'parent', 'athlete'],
+  recordScoutingEvaluation: ['coach', 'director'],
+  listScoutingEvaluations: ['coach', 'org_admin', 'director', 'parent', 'athlete'],
 };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const INVITE_TTL_MS = 7 * DAY_MS;
+/* Profile share links: same 7-day default TTL as invitations. */
+const PROFILE_SHARE_TTL_MS = 7 * DAY_MS;
+const OPPORTUNITY_LEVELS = ['collegiate', 'developmental', 'pre-professional', 'semi-professional', 'professional', 'national team'];
+const OPPORTUNITY_TYPES = ['tryout', 'combine', 'other'];
+const CONTACT_STATUSES = ['new', 'contacted', 'evaluating', 'offered', 'committed', 'declined'];
+const REFERRAL_STATUSES = ['referred', 'contacted', 'evaluating', 'offered', 'committed', 'declined'];
+const MEDIA_KINDS = ['highlight', 'full_game', 'other'];
+const PROFILE_STATUSES = ['draft', 'pending_approval', 'approved'];
+const SPORTS = ['baseball', 'soccer', 'basketball', 'football', 'flag_football'];
 
 function err(code, message) {
   const e = new Error(message || code);
@@ -136,6 +186,115 @@ function createSaasApi({ store, billing = null, assessmentHistory = null } = {})
     if (isMinor(athlete, now) && !store.hasConsent(athlete.id)) {
       throw err('CONSENT_REQUIRED', 'Guardian consent is required before remote features activate for a minor athlete.');
     }
+  }
+
+  /* --- Pathways V1 helpers (G1-G6) --- */
+
+  function requireDirector(auth, method) {
+    if (!auth || auth.role !== 'director') throw err('FORBIDDEN', `Only the director (owner) may call ${method}.`);
+  }
+
+  /* Public fields of a prospect profile — the ONLY fields a share
+   * token ever exposes. Contact info, training notes, medical info,
+   * and anything not listed here never leaves the server on a
+   * public read.
+   *
+   * Athlete name (Marcus decision 2026-11-26): the name MAY appear
+   * on an authorized prospect profile, subject to athlete + coach
+   * approval (+ guardian consent if the athlete is a minor).
+   * Profiles stay private by default: the name is included ONLY
+   * when both approval timestamps are recorded and, for a minor,
+   * a granted guardian-consent row is live at read time. Consent
+   * withdrawn after approval hides the name again — the profile
+   * itself stays shareable, the name does not. The gate is
+   * re-checked on every public read, never cached at approval
+   * time, and reuses the existing approval/consent records — no
+   * new consent logic. */
+  function nameDisplayAllowed(profile, now) {
+    const athlete = store.athleteById(profile.athleteId);
+    if (!athlete) return false;
+    if (!profile.athleteApprovedAt || !profile.coachApprovedAt) return false;
+    if (isMinor(athlete, now) && !store.hasConsent(athlete.id)) return false;
+    return true;
+  }
+
+  function publicProfileView(profile, now = Date.now()) {
+    const media = store.mediaLinksForProfile(profile.id).map(m => ({
+      kind: m.kind, url: m.url, title: m.title || null,
+    }));
+    const evaluations = store.evaluationsForAthlete(profile.athleteId)
+      .filter(e => e.coachApproved)
+      .map(e => ({ body: e.body, approvedAt: e.approvedAt || null }));
+    const athlete = store.athleteById(profile.athleteId);
+    return {
+      profileId: profile.id,
+      athleteName: nameDisplayAllowed(profile, now) ? (athlete && athlete.name) || null : null,
+      bio: profile.bio || null,
+      primarySport: profile.primarySport || null,
+      secondarySport: profile.secondarySport || null,
+      positions: profile.positions || [],
+      measurements: profile.measurements || {},
+      accomplishments: profile.accomplishments || [],
+      playingHistory: profile.playingHistory || [],
+      verifiedMetrics: profile.verifiedMetrics || {},
+      availability: profile.availability || null,
+      mediaLinks: media,
+      scoutingEvaluations: evaluations,
+    };
+  }
+
+  function requireProfile(profileId) {
+    const p = store.prospectProfileById(profileId);
+    if (!p) throw err('INVALID_INPUT', 'Prospect profile not found.');
+    return p;
+  }
+
+  function requireContact(contactId) {
+    const c = store.recruitmentContactById(contactId);
+    if (!c) throw err('INVALID_INPUT', 'Recruitment contact not found.');
+    return c;
+  }
+
+  /* CRM tenancy: a coach touches only contacts they created (or in
+   * an org they admin); org_admin only their org's contacts. */
+  function inContactScope(auth, contact) {
+    if (auth.role === 'director') return true;
+    if (auth.role === 'coach') {
+      const coach = coachFor(auth);
+      return !!coach && contact.createdByCoachId === coach.id;
+    }
+    if (auth.role === 'org_admin') {
+      const u = appUserFor(auth);
+      return !!u && contact.organizationId && store.isOrgAdmin(u.id, contact.organizationId);
+    }
+    return false;
+  }
+
+  function requireContactScope(auth, contact) {
+    if (!inContactScope(auth, contact)) throw err('FORBIDDEN', 'Recruitment contact is outside your scope.');
+  }
+
+  /* CRM list reads (Pathways V1, G1 fix): opportunities, notes, and
+   * referrals are stored server-side and must be readable back.
+   * Enrichment: list rows carry the contact's `organization`
+   * (orgName) so the athlete portal can name the organization
+   * without a contacts read athletes are not allowed to make. */
+  function withContactOrg(row) {
+    const contact = row && row.contactId ? store.recruitmentContactById(row.contactId) : null;
+    return { ...row, organization: contact ? contact.orgName : null };
+  }
+
+  /* Contact ids an athlete was referred to — the athlete-visible
+   * slice of the pipeline. */
+  function referredContactIds(athleteId) {
+    return new Set(store.referralsForAthlete(athleteId).map(r => r.contactId));
+  }
+
+  function isValidUrl(url) {
+    try {
+      const u = new URL(String(url));
+      return u.protocol === 'http:' || u.protocol === 'https:';
+    } catch { return false; }
   }
 
   /* Scope: can this caller act on this athlete at all?
@@ -822,6 +981,691 @@ function createSaasApi({ store, billing = null, assessmentHistory = null } = {})
       store.consents.push(consent);
       store.audit(auth.authUserId, 'withdraw_consent', { athleteId: athlete.id }, new Date(now).toISOString());
       return { consent };
+    },
+
+    /* --- Athlete Pathways V1 (G1/G2): owner account management --- */
+
+    ownerCreateAthlete(auth, params = {}) {
+      requireAuth(auth, 'ownerCreateAthlete');
+      requireDirector(auth, 'ownerCreateAthlete');
+      const now = params.now ?? Date.now();
+      if (!params.name) throw err('INVALID_INPUT', 'ownerCreateAthlete requires name.');
+      // Manual creation by the owner: no card, no subscription, no
+      // payment of any kind. Fictional test data only in tests.
+      const athlete = {
+        id: store.newId(), appUserId: params.appUserId || null, name: params.name,
+        age: params.age ?? null, dob: params.dob ?? null,
+        sports: Array.isArray(params.sports) ? params.sports : [],
+        status: 'active', createdBy: auth.authUserId,
+        createdAt: new Date(now).toISOString(),
+      };
+      store.athletes.set(athlete.id, athlete);
+      store.audit(auth.authUserId, 'owner_create_athlete', { athleteId: athlete.id }, new Date(now).toISOString());
+      return { athlete };
+    },
+
+    ownerListAthletes(auth, params = {}) {
+      requireAuth(auth, 'ownerListAthletes');
+      requireDirector(auth, 'ownerListAthletes');
+      const now = params.now ?? Date.now();
+      const athletes = [...store.athletes.values()].map(a => {
+        const grant = store.activeComplimentaryGrantsFor(a.id, now)[0] || null;
+        return {
+          athlete: a,
+          status: a.status || 'active',
+          complimentaryGrant: grant ? { id: grant.id, grantedAt: grant.grantedAt, expiresAt: grant.expiresAt, reason: grant.reason || null } : null,
+          entitlements: resolveAthleteEntitlements(store, a.id, now),
+        };
+      });
+      return { athletes, count: athletes.length };
+    },
+
+    grantComplimentary(auth, params = {}) {
+      requireAuth(auth, 'grantComplimentary');
+      requireDirector(auth, 'grantComplimentary');
+      const now = params.now ?? Date.now();
+      if (!params.athleteId) throw err('INVALID_INPUT', 'grantComplimentary requires athleteId.');
+      const athlete = requireAthlete(params.athleteId);
+      const existing = store.activeComplimentaryGrantsFor(athlete.id, now)[0];
+      if (existing) return { grant: existing, alreadyGranted: true };
+      if (params.expiresAt != null && Date.parse(params.expiresAt) <= now) {
+        throw err('INVALID_INPUT', 'expiresAt must be in the future.');
+      }
+      const grant = {
+        id: store.newId(), athleteId: athlete.id, grantedBy: auth.authUserId,
+        grantedAt: new Date(now).toISOString(),
+        expiresAt: params.expiresAt || null, // null = indefinite
+        status: 'active', reason: params.reason || null, revokedAt: null,
+      };
+      store.complimentaryGrants.push(grant);
+      store.audit(auth.authUserId, 'grant_complimentary', { athleteId: athlete.id, grantId: grant.id, expiresAt: grant.expiresAt }, new Date(now).toISOString());
+      return { grant, alreadyGranted: false, entitlements: resolveAthleteEntitlements(store, athlete.id, now) };
+    },
+
+    revokeComplimentary(auth, params = {}) {
+      requireAuth(auth, 'revokeComplimentary');
+      requireDirector(auth, 'revokeComplimentary');
+      const now = params.now ?? Date.now();
+      const grant = params.grantId
+        ? store.complimentaryGrantById(params.grantId)
+        : store.activeComplimentaryGrantsFor(params.athleteId || '', now)[0];
+      if (!grant || grant.status !== 'active') throw err('INVALID_INPUT', 'Active complimentary grant not found.');
+      grant.status = 'revoked';
+      grant.revokedAt = new Date(now).toISOString();
+      store.audit(auth.authUserId, 'revoke_complimentary', { athleteId: grant.athleteId, grantId: grant.id }, new Date(now).toISOString());
+      return { grant, entitlements: resolveAthleteEntitlements(store, grant.athleteId, now) };
+    },
+
+    suspendAthlete(auth, params = {}) {
+      requireAuth(auth, 'suspendAthlete');
+      requireDirector(auth, 'suspendAthlete');
+      const now = params.now ?? Date.now();
+      const athlete = requireAthlete(params.athleteId);
+      athlete.status = 'suspended';
+      store.audit(auth.authUserId, 'suspend_athlete', { athleteId: athlete.id, reason: params.reason || null }, new Date(now).toISOString());
+      return { athlete };
+    },
+
+    reactivateAthlete(auth, params = {}) {
+      requireAuth(auth, 'reactivateAthlete');
+      requireDirector(auth, 'reactivateAthlete');
+      const now = params.now ?? Date.now();
+      const athlete = requireAthlete(params.athleteId);
+      athlete.status = 'active';
+      store.audit(auth.authUserId, 'reactivate_athlete', { athleteId: athlete.id }, new Date(now).toISOString());
+      return { athlete };
+    },
+
+    updateAthleteRole(auth, params = {}) {
+      requireAuth(auth, 'updateAthleteRole');
+      requireDirector(auth, 'updateAthleteRole');
+      const now = params.now ?? Date.now();
+      if (!params.athleteId || !params.role) throw err('INVALID_INPUT', 'updateAthleteRole requires athleteId and role.');
+      if (!['athlete', 'parent', 'coach'].includes(params.role)) {
+        throw err('INVALID_INPUT', "role must be 'athlete', 'parent', or 'coach'.");
+      }
+      const athlete = requireAthlete(params.athleteId);
+      const appUser = athlete.appUserId ? store.appUserById(athlete.appUserId) : null;
+      if (appUser) appUser.role = params.role;
+      athlete.role = params.role; // recorded on the athlete row too
+      store.audit(auth.authUserId, 'update_athlete_role', { athleteId: athlete.id, role: params.role }, new Date(now).toISOString());
+      return { athlete, appUser };
+    },
+
+    ownerInviteAthlete(auth, params = {}) {
+      requireAuth(auth, 'ownerInviteAthlete');
+      requireDirector(auth, 'ownerInviteAthlete');
+      const now = params.now ?? Date.now();
+      if (!params.email) throw err('INVALID_INPUT', 'ownerInviteAthlete requires email.');
+      const u = appUserFor(auth);
+      const orgId = params.organizationId || PROGRAM_INTERNAL_ORG_ID;
+      const token = randomBytes(24).toString('hex');
+      const invite = {
+        id: store.newId(), organizationId: orgId, invitedBy: u ? u.id : null,
+        email: params.email, inviteRole: 'athlete', coachId: params.coachId || null,
+        tokenHash: createHash('sha256').update(token).digest('hex'),
+        status: 'pending', expiresAt: new Date(now + INVITE_TTL_MS).toISOString(),
+        createdAt: new Date(now).toISOString(),
+      };
+      store.invitations.push(invite);
+      store.audit(auth.authUserId, 'owner_invite_athlete', { organizationId: orgId, email: params.email }, new Date(now).toISOString());
+      // No email is sent anywhere: the token is returned once to the owner.
+      return { invitation: { ...invite, tokenHash: undefined }, token };
+    },
+
+    listAudit(auth, params = {}) {
+      requireAuth(auth, 'listAudit');
+      requireDirector(auth, 'listAudit');
+      const events = store.auditEvents.filter(e => !params.action || e.action === params.action);
+      return { events, count: events.length };
+    },
+
+    /* --- Athlete Pathways V1 (G3): prospect profiles + sharing --- */
+
+    createProspectProfile(auth, params = {}) {
+      requireAuth(auth, 'createProspectProfile');
+      const now = params.now ?? Date.now();
+      if (!params.athleteId) throw err('INVALID_INPUT', 'createProspectProfile requires athleteId.');
+      requireScopeWrite(auth, params.athleteId);
+      if (store.prospectProfileByAthlete(params.athleteId)) {
+        throw err('INVALID_INPUT', 'Athlete already has a prospect profile; update it instead.');
+      }
+      if (!params.primarySport || !SPORTS.includes(params.primarySport)) {
+        throw err('INVALID_INPUT', `primarySport must be one of ${SPORTS.join(', ')}.`);
+      }
+      const profile = {
+        id: store.newId(), athleteId: params.athleteId,
+        bio: params.bio || null,
+        primarySport: params.primarySport,
+        secondarySport: params.secondarySport || null,
+        positions: Array.isArray(params.positions) ? params.positions : [],
+        measurements: params.measurements || {},
+        accomplishments: Array.isArray(params.accomplishments) ? params.accomplishments : [],
+        playingHistory: Array.isArray(params.playingHistory) ? params.playingHistory : [],
+        verifiedMetrics: params.verifiedMetrics || {},
+        availability: params.availability || null,
+        contactInfo: params.contactInfo || {},
+        status: 'draft',
+        coachApprovedBy: null, coachApprovedAt: null,
+        athleteApprovedAt: null,
+        guardianConsentId: null,
+        createdBy: auth.authUserId, createdAt: new Date(now).toISOString(),
+      };
+      store.prospectProfiles.set(profile.id, profile);
+      store.audit(auth.authUserId, 'create_prospect_profile', { profileId: profile.id, athleteId: profile.athleteId }, new Date(now).toISOString());
+      return { profile };
+    },
+
+    updateProspectProfile(auth, params = {}) {
+      requireAuth(auth, 'updateProspectProfile');
+      const now = params.now ?? Date.now();
+      const profile = requireProfile(params.profileId);
+      requireScopeWrite(auth, profile.athleteId);
+      const editable = ['bio', 'primarySport', 'secondarySport', 'positions', 'measurements',
+        'accomplishments', 'playingHistory', 'verifiedMetrics', 'availability', 'contactInfo'];
+      for (const key of editable) {
+        if (params[key] !== undefined) {
+          if (key === 'primarySport' && !SPORTS.includes(params[key])) {
+            throw err('INVALID_INPUT', `primarySport must be one of ${SPORTS.join(', ')}.`);
+          }
+          profile[key] = params[key];
+        }
+      }
+      // Editing an approved profile re-opens it: re-approval is required.
+      if (profile.status === 'approved') {
+        profile.status = 'draft';
+        profile.coachApprovedBy = null; profile.coachApprovedAt = null;
+        profile.athleteApprovedAt = null;
+      }
+      profile.updatedAt = new Date(now).toISOString();
+      store.audit(auth.authUserId, 'update_prospect_profile', { profileId: profile.id }, new Date(now).toISOString());
+      return { profile };
+    },
+
+    /* Approval requires BOTH athlete and coach approval; a minor
+     * additionally requires a guardian-consent row. Call once per
+     * side: approval:'athlete' (self) or 'coach' (linked coach). */
+    approveProspectProfile(auth, params = {}) {
+      requireAuth(auth, 'approveProspectProfile');
+      const now = params.now ?? Date.now();
+      const profile = requireProfile(params.profileId);
+      const athlete = requireAthlete(profile.athleteId);
+      if (params.approval === 'athlete') {
+        const self = athleteSelfFor(auth);
+        if (auth.role !== 'director' && (!self || self.id !== athlete.id)) {
+          throw err('FORBIDDEN', 'Only the athlete may give athlete approval.');
+        }
+        profile.athleteApprovedAt = new Date(now).toISOString();
+      } else if (params.approval === 'coach') {
+        requireScopeWrite(auth, athlete.id);
+        const coach = coachFor(auth);
+        profile.coachApprovedBy = coach ? coach.id : auth.authUserId;
+        profile.coachApprovedAt = new Date(now).toISOString();
+      } else {
+        throw err('INVALID_INPUT', "approval must be 'athlete' or 'coach'.");
+      }
+      const bothApproved = !!profile.athleteApprovedAt && !!profile.coachApprovedAt;
+      if (bothApproved) {
+        if (isMinor(athlete, now)) {
+          requireConsent(athlete, now);
+          const consent = store.latestConsent(athlete.id);
+          profile.guardianConsentId = consent ? consent.id : null;
+        }
+        profile.status = 'approved';
+      } else {
+        profile.status = 'pending_approval';
+      }
+      store.audit(auth.authUserId, 'approve_prospect_profile', { profileId: profile.id, approval: params.approval, status: profile.status }, new Date(now).toISOString());
+      return { profile };
+    },
+
+    getProspectProfile(auth, params = {}) {
+      requireAuth(auth, 'getProspectProfile');
+      const profile = params.profileId ? requireProfile(params.profileId)
+        : store.prospectProfileByAthlete(params.athleteId);
+      if (!profile) throw err('INVALID_INPUT', 'Prospect profile not found.');
+      requireScopeRead(auth, profile.athleteId);
+      const evaluations = store.evaluationsForAthlete(profile.athleteId);
+      return {
+        profile,
+        mediaLinks: store.mediaLinksForProfile(profile.id),
+        // Scouting evaluations are visible to the athlete; only
+        // coach-approved ones are included in the public profile.
+        scoutingEvaluations: evaluations,
+        developmentGoals: store.goalsForAthlete(profile.athleteId),
+      };
+    },
+
+    createProfileShare(auth, params = {}) {
+      requireAuth(auth, 'createProfileShare');
+      const now = params.now ?? Date.now();
+      const profile = requireProfile(params.profileId);
+      requireScopeWrite(auth, profile.athleteId);
+      if (profile.status !== 'approved') {
+        throw err('PROFILE_NOT_APPROVED', 'Only an approved prospect profile may be shared.');
+      }
+      if (params.expiresAt != null && Date.parse(params.expiresAt) <= now) {
+        throw err('INVALID_INPUT', 'expiresAt must be in the future.');
+      }
+      const token = randomBytes(24).toString('hex');
+      const share = {
+        id: store.newId(), profileId: profile.id,
+        tokenHash: createHash('sha256').update(token).digest('hex'),
+        expiresAt: params.expiresAt || new Date(now + PROFILE_SHARE_TTL_MS).toISOString(),
+        revokedAt: null, status: 'active', createdBy: auth.authUserId,
+        createdAt: new Date(now).toISOString(),
+      };
+      store.profileShares.push(share);
+      store.audit(auth.authUserId, 'create_profile_share', { profileId: profile.id, shareId: share.id }, new Date(now).toISOString());
+      return { share: { ...share, tokenHash: undefined }, token };
+    },
+
+    revokeProfileShare(auth, params = {}) {
+      requireAuth(auth, 'revokeProfileShare');
+      const now = params.now ?? Date.now();
+      const share = store.profileShares.find(s => s.id === String(params.shareId));
+      if (!share) throw err('INVALID_INPUT', 'Profile share not found.');
+      const profile = requireProfile(share.profileId);
+      requireScopeWrite(auth, profile.athleteId);
+      share.status = 'revoked';
+      share.revokedAt = new Date(now).toISOString();
+      store.audit(auth.authUserId, 'revoke_profile_share', { profileId: profile.id, shareId: share.id }, new Date(now).toISOString());
+      return { share };
+    },
+
+    listProfileShares(auth, params = {}) {
+      requireAuth(auth, 'listProfileShares');
+      const profile = requireProfile(params.profileId);
+      requireScopeRead(auth, profile.athleteId);
+      return { shares: store.profileSharesFor(profile.id).map(s => ({ ...s, tokenHash: undefined })) };
+    },
+
+    /* Unauthenticated, token-only public read. `auth` may be null or
+     * the params object itself. Returns ONLY approved public fields. */
+    getPublicProfile(auth, params = {}) {
+      if (auth && !params.token && typeof auth.token === 'string') params = auth;
+      const now = params.now ?? Date.now();
+      if (!params.token) throw err('INVALID_INPUT', 'getPublicProfile requires token.');
+      const hash = createHash('sha256').update(String(params.token)).digest('hex');
+      const share = store.profileShareByTokenHash(hash);
+      if (!share || share.status !== 'active' || share.revokedAt) {
+        throw err('PROFILE_SHARE_INVALID', 'Profile share is revoked or invalid.');
+      }
+      if (Date.parse(share.expiresAt) <= now) {
+        share.status = 'expired';
+        throw err('PROFILE_SHARE_INVALID', 'Profile share has expired.');
+      }
+      const profile = requireProfile(share.profileId);
+      if (profile.status !== 'approved') throw err('PROFILE_NOT_APPROVED', 'Profile is not approved for sharing.');
+      return { profile: publicProfileView(profile, now) };
+    },
+
+    /* --- Athlete Pathways V1 (G4): recruitment CRM --- */
+
+    createRecruitmentContact(auth, params = {}) {
+      requireAuth(auth, 'createRecruitmentContact');
+      const now = params.now ?? Date.now();
+      if (!params.orgName) throw err('INVALID_INPUT', 'createRecruitmentContact requires orgName.');
+      if (params.level != null && !OPPORTUNITY_LEVELS.includes(params.level)) {
+        throw err('INVALID_INPUT', `level must be one of ${OPPORTUNITY_LEVELS.join(', ')}.`);
+      }
+      if (params.status != null && !CONTACT_STATUSES.includes(params.status)) {
+        throw err('INVALID_INPUT', `status must be one of ${CONTACT_STATUSES.join(', ')}.`);
+      }
+      const coach = coachFor(auth);
+      const u = appUserFor(auth);
+      const orgId = params.organizationId
+        || (coach ? coach.organizationId : null)
+        || (u ? (store.membershipsForUser(u.id)[0] || {}).organizationId : null)
+        || null;
+      const contact = {
+        id: store.newId(), orgName: params.orgName,
+        sport: params.sport || null, league: params.league || null,
+        level: params.level || null, region: params.region || null,
+        contactName: params.contactName || null, title: params.title || null,
+        email: params.email || null, phone: params.phone || null,
+        requirements: params.requirements || null,
+        status: params.status || 'new',
+        organizationId: orgId, createdByCoachId: coach ? coach.id : null,
+        createdBy: auth.authUserId, createdAt: new Date(now).toISOString(),
+      };
+      store.recruitmentContacts.set(contact.id, contact);
+      store.audit(auth.authUserId, 'create_recruitment_contact', { contactId: contact.id }, new Date(now).toISOString());
+      return { contact };
+    },
+
+    updateRecruitmentContact(auth, params = {}) {
+      requireAuth(auth, 'updateRecruitmentContact');
+      const now = params.now ?? Date.now();
+      const contact = requireContact(params.contactId);
+      requireContactScope(auth, contact);
+      const editable = ['orgName', 'sport', 'league', 'level', 'region', 'contactName',
+        'title', 'email', 'phone', 'requirements', 'status'];
+      for (const key of editable) {
+        if (params[key] !== undefined) {
+          if (key === 'level' && params[key] != null && !OPPORTUNITY_LEVELS.includes(params[key])) {
+            throw err('INVALID_INPUT', `level must be one of ${OPPORTUNITY_LEVELS.join(', ')}.`);
+          }
+          if (key === 'status' && !CONTACT_STATUSES.includes(params[key])) {
+            throw err('INVALID_INPUT', `status must be one of ${CONTACT_STATUSES.join(', ')}.`);
+          }
+          contact[key] = params[key];
+        }
+      }
+      contact.updatedAt = new Date(now).toISOString();
+      store.audit(auth.authUserId, 'update_recruitment_contact', { contactId: contact.id }, new Date(now).toISOString());
+      return { contact };
+    },
+
+    listRecruitmentContacts(auth, params = {}) {
+      requireAuth(auth, 'listRecruitmentContacts');
+      let contacts = [...store.recruitmentContacts.values()];
+      if (auth.role !== 'director') {
+        contacts = contacts.filter(c => inContactScope(auth, c));
+      }
+      if (params.status) contacts = contacts.filter(c => c.status === params.status);
+      if (params.level) contacts = contacts.filter(c => c.level === params.level);
+      if (params.region) contacts = contacts.filter(c => c.region === params.region);
+      if (params.sport) contacts = contacts.filter(c => c.sport === params.sport);
+      return { contacts, count: contacts.length };
+    },
+
+    createOpportunity(auth, params = {}) {
+      requireAuth(auth, 'createOpportunity');
+      const now = params.now ?? Date.now();
+      const contact = requireContact(params.contactId);
+      requireContactScope(auth, contact);
+      if (!params.type || !OPPORTUNITY_TYPES.includes(params.type)) {
+        throw err('INVALID_INPUT', `type must be one of ${OPPORTUNITY_TYPES.join(', ')}.`);
+      }
+      const opportunity = {
+        id: store.newId(), contactId: contact.id, type: params.type,
+        date: params.date || null, notes: params.notes || null,
+        createdBy: auth.authUserId, createdAt: new Date(now).toISOString(),
+      };
+      store.recruitmentOpportunities.push(opportunity);
+      store.audit(auth.authUserId, 'create_opportunity', { contactId: contact.id, opportunityId: opportunity.id }, new Date(now).toISOString());
+      return { opportunity };
+    },
+
+    listOpportunities(auth, params = {}) {
+      requireAuth(auth, 'listOpportunities');
+      let opps = [...store.recruitmentOpportunities];
+      if (params.contactId) {
+        const contact = requireContact(params.contactId);
+        if (auth.role === 'athlete') {
+          /* Athletes read only contacts they were referred to; a
+           * contact with no referral for them reads back empty,
+           * never an error that would leak its existence. */
+          const self = athleteSelfFor(auth);
+          if (!self || !referredContactIds(self.id).has(contact.id)) {
+            return { opportunities: [], count: 0 };
+          }
+        } else {
+          requireContactScope(auth, contact);
+        }
+        opps = opps.filter(o => o.contactId === contact.id);
+      }
+      if (params.athleteId) {
+        /* Athlete: self only. Coach/org_admin: an athlete in scope.
+         * Director: all. Cross-tenant reads are ATHLETE_NOT_FOUND,
+         * same as every other athlete-scoped list. */
+        requireScopeRead(auth, params.athleteId);
+        const allowed = referredContactIds(params.athleteId);
+        opps = opps.filter(o => allowed.has(o.contactId));
+      } else if (!params.contactId && auth.role !== 'director') {
+        if (auth.role === 'athlete') {
+          const self = athleteSelfFor(auth);
+          const allowed = self ? referredContactIds(self.id) : new Set();
+          opps = opps.filter(o => allowed.has(o.contactId));
+        } else {
+          opps = opps.filter(o => {
+            const c = store.recruitmentContactById(o.contactId);
+            return c && inContactScope(auth, c);
+          });
+        }
+      }
+      const rows = opps.map(withContactOrg);
+      return { opportunities: rows, count: rows.length };
+    },
+
+    addRecruitmentNote(auth, params = {}) {
+      requireAuth(auth, 'addRecruitmentNote');
+      const now = params.now ?? Date.now();
+      const contact = requireContact(params.contactId);
+      requireContactScope(auth, contact);
+      if (!params.body) throw err('INVALID_INPUT', 'addRecruitmentNote requires body.');
+      const note = {
+        id: store.newId(), contactId: contact.id,
+        author: auth.authUserId, body: params.body,
+        followUpDate: params.followUpDate || null,
+        createdAt: new Date(now).toISOString(),
+      };
+      store.recruitmentNotes.push(note);
+      store.audit(auth.authUserId, 'add_recruitment_note', { contactId: contact.id, noteId: note.id }, new Date(now).toISOString());
+      return { note };
+    },
+
+    listRecruitmentNotes(auth, params = {}) {
+      requireAuth(auth, 'listRecruitmentNotes');
+      let notes = [...store.recruitmentNotes];
+      if (params.contactId) {
+        const contact = requireContact(params.contactId);
+        requireContactScope(auth, contact);
+        notes = notes.filter(n => n.contactId === contact.id);
+      } else if (auth.role !== 'director') {
+        notes = notes.filter(n => {
+          const c = store.recruitmentContactById(n.contactId);
+          return c && inContactScope(auth, c);
+        });
+      }
+      return { notes, count: notes.length };
+    },
+
+    referAthlete(auth, params = {}) {
+      requireAuth(auth, 'referAthlete');
+      const now = params.now ?? Date.now();
+      const contact = requireContact(params.contactId);
+      requireContactScope(auth, contact);
+      requireScopeWrite(auth, params.athleteId);
+      const existing = store.referrals.find(r => r.contactId === contact.id
+        && r.athleteId === params.athleteId && r.status !== 'declined');
+      if (existing) return { referral: existing, alreadyReferred: true };
+      const referral = {
+        id: store.newId(), contactId: contact.id, athleteId: params.athleteId,
+        status: 'referred', outcome: null,
+        referredAt: new Date(now).toISOString(), referredBy: auth.authUserId,
+      };
+      store.referrals.push(referral);
+      store.audit(auth.authUserId, 'refer_athlete', { contactId: contact.id, athleteId: params.athleteId, referralId: referral.id }, new Date(now).toISOString());
+      return { referral, alreadyReferred: false };
+    },
+
+    updateReferralStatus(auth, params = {}) {
+      requireAuth(auth, 'updateReferralStatus');
+      const now = params.now ?? Date.now();
+      const referral = store.referralById(params.referralId);
+      if (!referral) throw err('INVALID_INPUT', 'Referral not found.');
+      const contact = requireContact(referral.contactId);
+      requireContactScope(auth, contact);
+      if (!params.status || !REFERRAL_STATUSES.includes(params.status)) {
+        throw err('INVALID_INPUT', `status must be one of ${REFERRAL_STATUSES.join(', ')}.`);
+      }
+      referral.status = params.status;
+      if (params.outcome !== undefined) referral.outcome = params.outcome;
+      referral.updatedAt = new Date(now).toISOString();
+      store.audit(auth.authUserId, 'update_referral_status', { referralId: referral.id, status: referral.status }, new Date(now).toISOString());
+      return { referral };
+    },
+
+    listReferrals(auth, params = {}) {
+      requireAuth(auth, 'listReferrals');
+      let refs = [...store.referrals];
+      if (params.contactId) {
+        const contact = requireContact(params.contactId);
+        if (auth.role === 'athlete') {
+          /* Athletes read only their own referrals on a contact. */
+          const self = athleteSelfFor(auth);
+          refs = refs.filter(r => r.contactId === contact.id
+            && self && r.athleteId === self.id);
+        } else {
+          requireContactScope(auth, contact);
+          refs = refs.filter(r => r.contactId === contact.id);
+        }
+      }
+      if (params.athleteId) {
+        requireScopeRead(auth, params.athleteId);
+        refs = refs.filter(r => r.athleteId === params.athleteId);
+      } else if (!params.contactId && auth.role !== 'director') {
+        if (auth.role === 'athlete') {
+          const self = athleteSelfFor(auth);
+          refs = self ? refs.filter(r => r.athleteId === self.id) : [];
+        } else {
+          refs = refs.filter(r => {
+            const c = store.recruitmentContactById(r.contactId);
+            return c && inContactScope(auth, c);
+          });
+        }
+      }
+      const rows = refs.map(withContactOrg);
+      return { referrals: rows, count: rows.length };
+    },
+
+    /* --- Athlete Pathways V1 (G5): media links (URL-only) --- */
+
+    addMediaLink(auth, params = {}) {
+      requireAuth(auth, 'addMediaLink');
+      const now = params.now ?? Date.now();
+      const profile = requireProfile(params.profileId);
+      requireScopeWrite(auth, profile.athleteId);
+      if (!params.kind || !MEDIA_KINDS.includes(params.kind)) {
+        throw err('INVALID_INPUT', `kind must be one of ${MEDIA_KINDS.join(', ')}.`);
+      }
+      // URL/embed links ONLY — no uploads, no Storage, no paid hosting.
+      if (!params.url || !isValidUrl(params.url)) {
+        throw err('INVALID_INPUT', 'addMediaLink requires a valid http(s) URL. Uploads are not supported.');
+      }
+      const link = {
+        id: store.newId(), profileId: profile.id, kind: params.kind,
+        url: String(params.url), title: params.title || null,
+        approvedBy: auth.authUserId, approvedAt: new Date(now).toISOString(),
+        createdAt: new Date(now).toISOString(),
+      };
+      store.prospectMediaLinks.push(link);
+      store.audit(auth.authUserId, 'add_media_link', { profileId: profile.id, mediaLinkId: link.id }, new Date(now).toISOString());
+      return { mediaLink: link };
+    },
+
+    removeMediaLink(auth, params = {}) {
+      requireAuth(auth, 'removeMediaLink');
+      const now = params.now ?? Date.now();
+      const link = store.prospectMediaLinks.find(m => m.id === String(params.mediaLinkId));
+      if (!link) throw err('INVALID_INPUT', 'Media link not found.');
+      const profile = requireProfile(link.profileId);
+      requireScopeWrite(auth, profile.athleteId);
+      store.prospectMediaLinks = store.prospectMediaLinks.filter(m => m.id !== link.id);
+      store.audit(auth.authUserId, 'remove_media_link', { profileId: profile.id, mediaLinkId: link.id }, new Date(now).toISOString());
+      return { removed: true, mediaLinkId: link.id };
+    },
+
+    listMediaLinks(auth, params = {}) {
+      requireAuth(auth, 'listMediaLinks');
+      const profile = requireProfile(params.profileId);
+      requireScopeRead(auth, profile.athleteId);
+      return { mediaLinks: store.mediaLinksForProfile(profile.id) };
+    },
+
+    /* --- Athlete Pathways V1 (G6): sport, goals, scouting --- */
+
+    assignSport(auth, params = {}) {
+      requireAuth(auth, 'assignSport');
+      const now = params.now ?? Date.now();
+      if (!params.athleteId || !params.sport) throw err('INVALID_INPUT', 'assignSport requires athleteId and sport.');
+      if (!SPORTS.includes(params.sport)) {
+        throw err('INVALID_INPUT', `sport must be one of ${SPORTS.join(', ')}.`);
+      }
+      requireScopeWrite(auth, params.athleteId);
+      const coach = params.coachId ? store.coachById(params.coachId) : coachFor(auth);
+      if (!coach) throw err('INVALID_INPUT', 'assignSport requires a coach.');
+      const link = store.links.find(l => l.coachId === coach.id
+        && l.athleteId === params.athleteId && l.status === 'active');
+      if (!link) throw err('ATHLETE_NOT_FOUND', 'No active coach-athlete link for this athlete.');
+      link.sport = params.sport;
+      link.positions = Array.isArray(params.positions) ? params.positions : (link.positions || []);
+      const athlete = requireAthlete(params.athleteId);
+      if (!athlete.sports.includes(params.sport)) athlete.sports = [...athlete.sports, params.sport];
+      store.audit(auth.authUserId, 'assign_sport', { athleteId: athlete.id, sport: params.sport }, new Date(now).toISOString());
+      return { link, athlete };
+    },
+
+    setDevelopmentGoals(auth, params = {}) {
+      requireAuth(auth, 'setDevelopmentGoals');
+      const now = params.now ?? Date.now();
+      if (!params.athleteId || !params.goal) throw err('INVALID_INPUT', 'setDevelopmentGoals requires athleteId and goal.');
+      requireScopeWrite(auth, params.athleteId);
+      const coach = coachFor(auth);
+      const goal = {
+        id: store.newId(), athleteId: params.athleteId,
+        coachId: coach ? coach.id : (params.coachId || null),
+        goal: params.goal, targetDate: params.targetDate || null,
+        status: 'active', createdAt: new Date(now).toISOString(),
+      };
+      store.developmentGoals.push(goal);
+      store.audit(auth.authUserId, 'set_development_goal', { athleteId: goal.athleteId, goalId: goal.id }, new Date(now).toISOString());
+      return { goal };
+    },
+
+    updateDevelopmentGoal(auth, params = {}) {
+      requireAuth(auth, 'updateDevelopmentGoal');
+      const now = params.now ?? Date.now();
+      const goal = store.developmentGoals.find(g => g.id === String(params.goalId));
+      if (!goal) throw err('INVALID_INPUT', 'Development goal not found.');
+      requireScopeWrite(auth, goal.athleteId);
+      if (params.status != null) {
+        if (!['active', 'completed', 'cancelled'].includes(params.status)) {
+          throw err('INVALID_INPUT', "status must be 'active', 'completed', or 'cancelled'.");
+        }
+        goal.status = params.status;
+      }
+      if (params.goal != null) goal.goal = params.goal;
+      if (params.targetDate !== undefined) goal.targetDate = params.targetDate;
+      goal.updatedAt = new Date(now).toISOString();
+      store.audit(auth.authUserId, 'update_development_goal', { goalId: goal.id, status: goal.status }, new Date(now).toISOString());
+      return { goal };
+    },
+
+    listDevelopmentGoals(auth, params = {}) {
+      requireAuth(auth, 'listDevelopmentGoals');
+      requireScopeRead(auth, params.athleteId);
+      return { goals: store.goalsForAthlete(params.athleteId) };
+    },
+
+    recordScoutingEvaluation(auth, params = {}) {
+      requireAuth(auth, 'recordScoutingEvaluation');
+      const now = params.now ?? Date.now();
+      if (!params.athleteId || !params.body) throw err('INVALID_INPUT', 'recordScoutingEvaluation requires athleteId and body.');
+      requireScopeWrite(auth, params.athleteId);
+      const coach = coachFor(auth);
+      const evaluation = {
+        id: store.newId(), athleteId: params.athleteId,
+        coachId: coach ? coach.id : (params.coachId || null),
+        body: params.body,
+        // Coach-authored evaluations are coach-approved on record;
+        // only coach-approved evaluations enter the public profile.
+        coachApproved: params.coachApproved !== false,
+        approvedBy: coach ? coach.id : auth.authUserId,
+        approvedAt: new Date(now).toISOString(),
+        createdAt: new Date(now).toISOString(),
+      };
+      store.scoutingEvaluations.push(evaluation);
+      store.audit(auth.authUserId, 'record_scouting_evaluation', { athleteId: evaluation.athleteId, evaluationId: evaluation.id }, new Date(now).toISOString());
+      return { evaluation };
+    },
+
+    listScoutingEvaluations(auth, params = {}) {
+      requireAuth(auth, 'listScoutingEvaluations');
+      requireScopeRead(auth, params.athleteId);
+      return { evaluations: store.evaluationsForAthlete(params.athleteId) };
     },
 
     /* --- org admin --- */

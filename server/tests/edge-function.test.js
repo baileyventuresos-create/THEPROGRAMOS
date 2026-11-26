@@ -144,6 +144,8 @@ function freshTsApi() {
     athletes,
     coachAuth: { 'auth-coach-marcus': 'coach-marcus', 'auth-coach-other': 'coach-other' },
     byId: new Map(athletes.map((a) => [a.id, a])),
+    links: [],
+    orgMemberships: [],
   };
   return workflowTs.loadWorkflow({
     store: new MemoryAssessmentStore(),
@@ -356,6 +358,28 @@ test('Edge directory: coach mapping, guardian links, and adult ages come from th
   assert.equal(youth.authUserId, 'athlete-youth-uid');
 });
 
+test('Edge directory: SaaS links and org memberships come from the database', async () => {
+  const fake = createFakeSupabase(seedDirectoryTables(Wingback, Youth));
+  const { directory } = await directoryTs.buildDirectory(fake, 'auth-coach-marcus');
+  assert.deepEqual(directory.links, [
+    { coachId: 'coach-other', athleteId: W, organizationId: 'org-yak', status: 'active' },
+    { coachId: 'coach-other', athleteId: Y, organizationId: 'org-yak', status: 'paused' },
+    { coachId: 'coach-marcus', athleteId: Y, organizationId: 'org-ell', status: 'active' },
+  ]);
+  assert.deepEqual(directory.orgMemberships, [
+    { authUserId: 'auth-org-admin', organizationId: 'org-yak', orgRole: 'org_admin', status: 'active' },
+  ]);
+});
+
+test('Edge directory: org_admin auth context carries the role and no coach id', async () => {
+  const fake = createFakeSupabase(seedDirectoryTables(Wingback, Youth));
+  const { auth } = await directoryTs.buildDirectory(fake, 'auth-org-admin');
+  assert.equal(auth.role, 'org_admin');
+  assert.equal(auth.coachId, null);
+  assert.equal(auth.athleteId, null);
+  assert.equal(auth.authUserId, 'auth-org-admin');
+});
+
 test('Edge directory: parent and athlete auth contexts carry no coach id', async () => {
   const fake = createFakeSupabase(seedDirectoryTables(Wingback, Youth));
   const parent = await directoryTs.buildDirectory(fake, 'parent-youth-uid');
@@ -437,9 +461,46 @@ bundleTest('Edge HTTP: listAthletes is scoped to the caller’s cohorts', async 
   assert.equal(coach.status, 200);
   assert.equal(coach.json.ok, true);
   assert.deepEqual(coach.json.data.map((a) => a.id).sort(), [W, Y].sort());
+  /* coach-other has no cohort enrolment at all: the one athlete he
+   * sees comes only from his ACTIVE SaaS link (migration 006), and
+   * the paused link to the youth grants nothing. */
   const other = await callHandler({ method: 'POST', token: 'token-coach-other', body: { method: 'listAthletes', params: {} } });
   assert.equal(other.status, 200);
-  assert.deepEqual(other.json.data, [], 'a coach with no cohorts in the directory sees nobody');
+  assert.deepEqual(other.json.data.map((a) => a.id), [W]);
+});
+
+bundleTest('Edge HTTP: a coach with an active SaaS link (no cohort) can assess that athlete', async () => {
+  const fake = installFake();
+  const done = await callHandler({
+    method: 'POST', token: 'token-coach-other',
+    body: { method: 'completeAssessment', params: { athleteId: W, entries: Wingback.baseline.entries, idempotencyKey: 'http-saas-key-1', now: Wingback.baseline.recordedAt } },
+  });
+  assert.equal(done.status, 200, JSON.stringify(done.json));
+  assert.equal(done.json.data.session.coachId, 'coach-other');
+  assert.equal(fake.db.assessment_sessions.length, 1);
+  const refused = await callHandler({
+    method: 'POST', token: 'token-coach-other',
+    body: { method: 'completeAssessment', params: { athleteId: Y, entries: Youth.baseline.entries, idempotencyKey: 'http-saas-key-2', now: Youth.baseline.recordedAt } },
+  });
+  assert.equal(refused.status, 403, 'the paused link to the youth grants no assess scope');
+  assert.equal(refused.json.error.code, 'FORBIDDEN');
+  assert.equal(fake.db.assessment_sessions.length, 1, 'the refused assessment recorded nothing');
+});
+
+bundleTest('Edge HTTP: org_admin views athletes linked inside administered orgs, never assesses', async () => {
+  installFake();
+  const list = await callHandler({ method: 'POST', token: 'token-org-admin', body: { method: 'listAthletes', params: {} } });
+  assert.equal(list.status, 200);
+  assert.deepEqual(list.json.data.map((a) => a.id), [W], 'only the wingback is linked inside org-yak');
+  const view = await callHandler({ method: 'POST', token: 'token-org-admin', body: { method: 'athleteAssessmentView', params: { athleteId: W } } });
+  assert.equal(view.status, 200);
+  const otherOrg = await callHandler({ method: 'POST', token: 'token-org-admin', body: { method: 'athleteAssessmentView', params: { athleteId: Y } } });
+  assert.equal(otherOrg.status, 403, 'the youth is not linked inside an administered org');
+  const assess = await callHandler({ method: 'POST', token: 'token-org-admin', body: { method: 'startAssessment', params: { athleteId: W } } });
+  assert.equal(assess.status, 403, 'org_admin never records assessments');
+  assert.equal(assess.json.error.code, 'FORBIDDEN');
+  const dash = await callHandler({ method: 'POST', token: 'token-org-admin', body: { method: 'coachDashboard', params: {} } });
+  assert.equal(dash.status, 403, 'org_admin has no coach dashboard');
 });
 
 bundleTest('Edge HTTP: full assessment flow through the real handler, with cross-athlete access refused', async () => {
