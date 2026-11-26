@@ -1662,6 +1662,19 @@
       + 'Billing on this surface is test mode only.</p>';
   }
 
+  /* Production sign-in panel. Shown instead of the hub whenever the
+   * app runs off localhost without a signed-in session. Accounts are
+   * created by the director — there is no self-registration here. */
+  function renderSignIn(state, h) {
+    return '<p style="margin:0 0 8px">Sign in with your THE PROGRAM account to continue. '
+      + 'Accounts are created by the director; if you do not have one yet, ask them.</p>'
+      + '<div class="grid g2" style="gap:12px;max-width:560px">'
+      + '<label class="small">Email <input id="sui-auth-email" type="email" autocomplete="username" style="width:100%;padding:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink)"></label>'
+      + '<label class="small">Password <input id="sui-auth-password" type="password" autocomplete="current-password" style="width:100%;padding:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink)"></label>'
+      + '</div>'
+      + '<div class="row" style="gap:8px;margin-top:12px"><button class="btn solid sm" data-sui="auth-sign-in">Sign in</button></div>';
+  }
+
   function renderHub(state, h) {
     let right = '';
     if (h.devRoles) {
@@ -1672,9 +1685,23 @@
           + '>' + h.esc(r.label) + '</button>';
       }).join(' ');
     }
+    /* Production: the dev "View as" switcher is gone. A signed-in
+     * user gets a sign-out button; everyone else gets the gate. */
+    if (!h.devMode && state.authStatus === 'signed-in') {
+      right += ' <button class="btn sm ghost" data-sui="auth-sign-out">Sign out' + (state.authUser && state.authUser.email ? ' (' + h.esc(state.authUser.email) + ')' : '') + '</button>';
+    }
     right += ' <button class="btn sm ghost" data-sui="refresh">Refresh</button>';
     let body = '';
-    if (state.connected === false) {
+    if (!h.devMode && state.authStatus === 'unconfigured') {
+      body += '<p class="muted" style="margin:0">Production sign-in is not configured yet — the Supabase URL and anon key are missing '
+        + '(see saas-ui/supabase-config.example.js). The app cannot sign anyone in until the director adds them.</p>';
+    } else if (!h.devMode && state.authStatus === 'signed-out') {
+      body += renderSignIn(state, h);
+    } else if (!h.devMode && state.authStatus === 'unmapped') {
+      body += '<p style="margin:0 0 8px">Signed in as <b>' + h.esc((state.authUser && state.authUser.email) || 'unknown') + '</b>, '
+        + 'but no app role (director, coach, athlete, parent) is linked to this account yet. Ask the director to link your role, then sign in again.</p>'
+        + '<div class="row" style="gap:8px"><button class="btn sm ghost" data-sui="auth-sign-out">Sign out</button></div>';
+    } else if (state.connected === false) {
       body += '<p class="muted" style="margin:0">SaaS service not connected — start the dev server (<span class="mono">npm run dev</span>) to use accounts, rosters and assignments.</p>';
     } else if (state.connected !== true) {
       body += '<p class="muted" style="margin:0">Connecting to the SaaS service…</p>';
@@ -1767,13 +1794,29 @@
     var root = options.root || (typeof globalThis !== 'undefined' ? globalThis : {});
     var doc = options.doc || root.document || null;
     var endpoint = options.endpoint || root.SAAS_API_URL || '/api/saas';
-    var getToken = typeof options.getToken === 'function' ? options.getToken : null;
+    /* Production Supabase Auth (saas-ui/supabase-auth.js). In dev
+     * mode the auth client is ignored and the "View as" switcher
+     * stands in for the signed-in user, exactly as before. In
+     * production the switcher is gone (h.devRoles is null) and the
+     * hub gates on the Auth session: no session → sign-in form;
+     * session with no mapped app role → unmapped notice. The
+     * mapped role is a DISPLAY hint only — the server derives the
+     * role from app_users on every request. */
+    var authClient = options.auth || null;
+    var getToken = typeof options.getToken === 'function' ? options.getToken
+      : (authClient && typeof authClient.getAccessToken === 'function'
+        ? function () { return authClient.getAccessToken(); } : null);
     var devMode = options.dev !== false;
     var injectedClient = options.client || null;
 
     var state = {
       connected: null, error: null, notice: null,
-      role: DEV_ROLES[0],
+      role: devMode ? DEV_ROLES[0] : null,
+      /* Production auth state. 'signed-out' | 'signed-in' |
+       * 'unmapped' (signed in, no app role linked) | 'unconfigured'
+       * (no Supabase URL/anon key). Dev mode leaves this null. */
+      authStatus: devMode ? null : 'signed-out',
+      authUser: null,
       tab: 'overview', interval: 'month',
       plans: null, entitlements: null, subscription: null,
       roster: null, assignments: null, history: null,
@@ -1817,6 +1860,7 @@
         return found ? (found.athlete.name || found.athlete.id) : String(id);
       };
       h.devRoles = devMode ? DEV_ROLES : null;
+      h.devMode = devMode;
       h.role = state.role;
       return h;
     }
@@ -1826,6 +1870,7 @@
       if (!root.SaasClient || typeof root.SaasClient.createSaasClient !== 'function') {
         throw new Error('SaasClient is not loaded.');
       }
+      if (!role) throw new Error('No signed-in role — sign in first.');
       const key = role.user;
       if (!clientCache[key]) {
         clientCache[key] = root.SaasClient.createSaasClient({
@@ -1840,6 +1885,65 @@
     }
 
     function client() { return makeClient(state.role); }
+
+    /* Production auth: read the stored Supabase session and set the
+     * UI role from the mapped app role (display hint only). Returns
+     * true when a signed-in, role-mapped session is active. Dev mode
+     * never calls this. */
+    function applyAuthSession() {
+      if (devMode || !authClient) return false;
+      if (typeof authClient.isConfigured === 'function' && !authClient.isConfigured()) {
+        state.authStatus = 'unconfigured';
+        state.authUser = null;
+        state.role = null;
+        return false;
+      }
+      var session = typeof authClient.getSession === 'function' ? authClient.getSession() : null;
+      var user = session ? session.user : null;
+      if (!user) {
+        state.authStatus = 'signed-out';
+        state.authUser = null;
+        state.role = null;
+        return false;
+      }
+      var role = typeof authClient.roleForUser === 'function' ? authClient.roleForUser(user) : null;
+      state.authUser = user;
+      if (!role) {
+        state.authStatus = 'unmapped';
+        state.role = null;
+        return false;
+      }
+      state.authStatus = 'signed-in';
+      state.role = { role: role, user: user.id, label: (user.email || role) + ' (' + role + ')' };
+      return true;
+    }
+
+    async function signIn() {
+      state.error = null; state.notice = null;
+      try {
+        if (!authClient || typeof authClient.signInWithPassword !== 'function') {
+          throw new Error('Sign-in is not configured.');
+        }
+        await authClient.signInWithPassword(val('sui-auth-email'), val('sui-auth-password'));
+        applyAuthSession();
+        state.notice = 'Signed in.';
+        await refresh();
+      } catch (e) { fail(e); }
+      rerender();
+    }
+
+    async function signOut() {
+      state.error = null; state.notice = null;
+      try {
+        if (authClient && typeof authClient.signOut === 'function') await authClient.signOut();
+      } catch (e) { /* sign-out is best-effort */ }
+      state.authStatus = 'signed-out';
+      state.authUser = null;
+      state.role = null;
+      state.connected = null;
+      state.notice = 'Signed out.';
+      rerender();
+    }
 
     function toast(msg) {
       try { if (typeof root.toast === 'function') root.toast(msg); } catch (e) { /* best-effort */ }
@@ -1923,6 +2027,9 @@
     }
 
     async function switchRole(role) {
+      /* Production: roles come from the signed-in Supabase session,
+       * never from a switcher. Dev mode keeps the old behavior. */
+      if (!devMode) return;
       state.role = role;
       state.assignments = null;
       state.history = null;
@@ -2686,6 +2793,10 @@
         'tab': function () { state.tab = t.getAttribute('data-tab') || 'overview'; state.error = null; rerender(); return Promise.resolve(); },
         'interval': function () { state.interval = t.getAttribute('data-interval') || 'month'; rerender(); return Promise.resolve(); },
         'refresh': function () { return refresh(); },
+        /* Production auth: the dev "View as" switcher is not rendered
+         * off localhost, and switchRole refuses in production too. */
+        'auth-sign-in': function () { return signIn(); },
+        'auth-sign-out': function () { return signOut(); },
         'role': function () {
           return switchRole({
             role: t.getAttribute('data-sui-role'), user: t.getAttribute('data-user'),
@@ -2789,6 +2900,21 @@
       }
       if (doc && typeof doc.addEventListener === 'function') doc.addEventListener('click', onClick);
       installed = true;
+      /* Production: no session → the hub shows the sign-in form and
+       * nothing calls the API until someone signs in. A stored
+       * session is refreshed proactively so a just-expired token
+       * does not bounce the first call. Dev mode refreshes as before. */
+      if (!devMode) {
+        const signedIn = applyAuthSession();
+        if (!signedIn) { state.connected = false; rerender(); return true; }
+        if (authClient && typeof authClient.ensureFreshSession === 'function') {
+          authClient.ensureFreshSession().then(function () {
+            applyAuthSession();
+            refresh();
+          }).catch(function () { refresh(); });
+          return true;
+        }
+      }
       refresh();
       return true;
     }

@@ -551,7 +551,11 @@
     }
     right += ' <button class="btn sm ghost" data-aui="refresh">Refresh</button>';
     let body = '';
-    if (state.connected === false) {
+    /* Production: no signed-in role → sign-in lives in the SaaS hub
+     * above; assessments stay quiet instead of calling the API. */
+    if (!h.devMode && !state.role) {
+      body += '<p class="muted" style="margin:0">Sign in above (remote coaching section) to use assessments.</p>';
+    } else if (state.connected === false) {
       body += '<p class="muted" style="margin:0">Assessment service not connected — start the dev server (<span class="mono">npm run dev</span>) to record assessments.</p>';
     } else if (state.connected !== true) {
       body += '<p class="muted" style="margin:0">Connecting to the assessment service…</p>';
@@ -619,13 +623,19 @@
     var root = options.root || (typeof globalThis !== 'undefined' ? globalThis : {});
     var doc = options.doc || root.document || null;
     var endpoint = options.endpoint || root.ASSESSMENT_API_URL || '/api/assessments';
-    var getToken = typeof options.getToken === 'function' ? options.getToken : null;
+    /* Production Supabase Auth (shared client with the SaaS UI).
+     * Dev mode ignores it; production gates on the session and the
+     * "View as" switcher is gone (h.devRoles is null). */
+    var authClient = options.auth || null;
+    var getToken = typeof options.getToken === 'function' ? options.getToken
+      : (authClient && typeof authClient.getAccessToken === 'function'
+        ? function () { return authClient.getAccessToken(); } : null);
     var devMode = options.dev !== false;
     var injectedClient = options.client || null;
 
     var state = {
       connected: null, error: null, notice: null,
-      role: DEV_ROLES[0],
+      role: devMode ? DEV_ROLES[0] : null,
       roster: null, dashboard: null, battery: null,
       view: 'roster', athleteId: null, draft: null,
       athleteView: null, readiness: null, plan: null,
@@ -649,8 +659,23 @@
       };
       h.canAssess = state.role && (state.role.role === 'director' || state.role.role === 'coach');
       h.devRoles = devMode ? DEV_ROLES : null;
+      h.devMode = devMode;
       h.role = state.role;
       return h;
+    }
+
+    /* Production auth: same session the SaaS hub signs in with.
+     * Sets state.role from the mapped app role (display hint only);
+     * null when signed out or unmapped. Dev mode never calls this. */
+    function applyAuthSession() {
+      if (devMode || !authClient) return false;
+      var session = typeof authClient.getSession === 'function' ? authClient.getSession() : null;
+      var user = session ? session.user : null;
+      if (!user) { state.role = null; return false; }
+      var role = typeof authClient.roleForUser === 'function' ? authClient.roleForUser(user) : null;
+      if (!role) { state.role = null; return false; }
+      state.role = { role: role, user: user.id, label: (user.email || role) + ' (' + role + ')' };
+      return true;
     }
 
     function makeClient(role) {
@@ -658,6 +683,7 @@
       if (!root.AssessmentClient || typeof root.AssessmentClient.createAssessmentClient !== 'function') {
         throw new Error('AssessmentClient is not loaded.');
       }
+      if (!role) throw new Error('No signed-in role — sign in first.');
       const key = role.user;
       if (!clientCache[key]) {
         clientCache[key] = root.AssessmentClient.createAssessmentClient({
@@ -871,6 +897,9 @@
     }
 
     async function switchRole(role) {
+      /* Production: roles come from the signed-in Supabase session,
+       * never from a switcher. Dev mode keeps the old behavior. */
+      if (!devMode) return;
       state.role = role;
       state.view = 'roster';
       state.athleteId = null;
@@ -938,6 +967,19 @@
       }
       if (doc && typeof doc.addEventListener === 'function') doc.addEventListener('click', onClick);
       installed = true;
+      /* Production: no signed-in session → stay quiet (the SaaS hub
+       * above owns the sign-in form); nothing calls the API. */
+      if (!devMode) {
+        const signedIn = applyAuthSession();
+        if (!signedIn) { state.connected = false; rerender(); return true; }
+        if (authClient && typeof authClient.ensureFreshSession === 'function') {
+          authClient.ensureFreshSession().then(function () {
+            applyAuthSession();
+            refresh();
+          }).catch(function () { refresh(); });
+          return true;
+        }
+      }
       refresh();
       return true;
     }
