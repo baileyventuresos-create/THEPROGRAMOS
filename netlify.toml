@@ -1,0 +1,11 @@
+# THE PROGRAM OS — Netlify build config (Option B, Marcus 2026-11-26).
+#
+# The only build step generates saas-ui/supabase-config.js from the
+# Netlify environment variables THE_PROGRAM_SUPABASE_URL and
+# THE_PROGRAM_SUPABASE_ANON_KEY (public values; the anon key is
+# publishable by Supabase design). The file stays gitignored and is
+# never committed. No other build step exists; the site is static and
+# publishes from the repository root, exactly as before.
+[build]
+  command = "node scripts/generate-supabase-config.mjs"
+  publish = "."

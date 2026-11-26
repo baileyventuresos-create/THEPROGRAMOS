@@ -37,31 +37,38 @@ the UI shows, never what the server allows. A signed-in user with no
 mapped role sees "no app role linked — ask the director" and can call
 nothing role-gated.
 
-## Blocker: the anon key is NOT in this repo
+## Blocker: the anon key is NOT in this repo — production route is Option B
 
 The Supabase anon key is a public/publishable key by Supabase design,
-but it is still config, never hardcoded. It was **not findable** in
-the repo or docs, and the only retrieval path in this environment is
-blocked:
+but it is still config, never hardcoded. For **local dev** it lives in
+the gitignored `saas-ui/supabase-config.js` (copy from
+`saas-ui/supabase-config.example.js`; the dashboard copy route is
+project TheProgramOS (`rkgdwqgmldznczikrjip`) → Settings → API →
+**anon public key**). The service_role key is NEVER stored in the
+browser or this repo.
 
-- The registered `custom.supabase` connector (Management API) returns
-  **HTTP 401 "Invalid access token"** — including on its own canonical
-  read (`supabase.py auth-get` for the Big Whiff project), so the
-  stored personal access token itself is invalid/expired, not the
-  request shape. A read-only fetch of
-  `GET /v1/projects/rkgdwqgmldznczikrjip/api-keys` was attempted and
-  got the same 401.
-- The one-off script is kept at `/tmp/get-programos-anon-key.py`
-  (ephemeral; it writes the key straight into the gitignored config
-  file and never prints it).
+For **production** the file is generated at deploy time (Option B,
+Marcus 2026-11-26): `netlify.toml` runs
+`scripts/generate-supabase-config.mjs`, which writes
+`saas-ui/supabase-config.js` from the Netlify environment variables
+`THE_PROGRAM_SUPABASE_URL` and `THE_PROGRAM_SUPABASE_ANON_KEY` set
+on the theprogramos site. The file stays gitignored — a Netlify
+deploy from GitHub main can never include a committed copy, and the
+live site returned 404 for it before this fix. The generator fails
+the build loudly when either variable is missing or malformed, so a
+misconfigured deploy never publishes an unconfigured site.
 
-**To unblock:** either (a) reconnect the `custom.supabase` connector
-with a fresh full-access personal access token, then re-run the script,
-or (b) copy the key from the Supabase dashboard — project
-TheProgramOS (`rkgdwqgmldznczikrjip`) → Settings → API → **anon
-public key** — into `saas-ui/supabase-config.js` (copy from
-`saas-ui/supabase-config.example.js`). The service_role key is NEVER
-stored in the browser or this repo.
+The registered `custom.supabase` connector (Management API) still
+returns **HTTP 401 "Invalid access token"** — including on its own
+canonical read (`supabase.py auth-get` for the Big Whiff project),
+so the stored personal access token itself is invalid/expired, not
+the request shape. That blocks the Management API / CLI login the
+Edge Function deploy needs, not the anon key: reconnect the
+connector with a fresh full-access personal access token (see
+`docs/PRODUCTION_INTEGRATION_REPORT.md` §4 / §9). The one-off script
+is kept at `/tmp/get-programos-anon-key.py` (ephemeral; it writes
+the key straight into the gitignored config file and never prints
+it).
 
 Until the key is in place the app reports "Production sign-in is not
 configured" instead of pretending sign-in works.
