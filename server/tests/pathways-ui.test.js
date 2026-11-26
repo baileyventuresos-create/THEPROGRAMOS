@@ -20,6 +20,7 @@ const { MemorySaasStore } = require('../saas-store');
 const { createSaasApi } = require('../saas-api');
 const { FakeBillingAdapter } = require('../billing');
 const { createDevServer } = require('../dev-server');
+const { compareValues } = require('../progress');
 const Youth = require('../fixtures/synthetic-youth-12');
 
 const YOUTH_ID = Youth.athlete.id;
@@ -207,6 +208,54 @@ test('trend series: baseline/latest/personal best, lower-is-better for timed tes
   const single = UI.trendSeriesFromAssessments([TWO_SESSIONS[0]]);
   assert.equal(single[0].baseline, single[0].latest);
   assert.deepEqual(UI.trendSeriesFromAssessments([]), []);
+});
+
+test('F1: trend caption status matches the canonical calculator at the maintenance-band edge', () => {
+  /* The seeded validation case (VALIDATION.md §7/F1): 10yd-sprint
+   * 2.30 → 2.25 is exactly −0.05 s, the band edge. The calculator
+   * says maintained; the old caption said (improved). */
+  const edge = [
+    { completedAt: '2026-09-01T00:00:00Z', results: [{ assessmentId: '10yd-sprint', result: 2.30, unit: 'sec' }] },
+    { completedAt: '2026-09-29T00:00:00Z', results: [{ assessmentId: '10yd-sprint', result: 2.25, unit: 'sec' }] },
+  ];
+  const series = UI.trendSeriesFromAssessments(edge);
+  assert.equal(series.length, 1);
+  const calc = compareValues('10yd-sprint', 2.30, 2.25, 0.05);
+  assert.equal(calc.status, 'maintained', 'calculator: band-edge move is maintained');
+  assert.equal(series[0].status, calc.status, 'chart series status agrees with the calculator');
+  const caption = UI.renderTrendChart(series[0]);
+  assert.ok(caption.includes('-0.05 sec'), 'numbers stay exact');
+  assert.ok(caption.includes('(maintained)'), 'band-edge move is captioned maintained, not improved');
+  assert.ok(!caption.includes('(improved)'), 'no contradictory improved label');
+
+  /* Agreement table: caption rule vs calculator across bands,
+   * directions, and the edge on both sides. */
+  const cases = [
+    ['10yd-sprint', 'lower', 2.30, 2.25, 0.05, 'maintained'],
+    ['10yd-sprint', 'lower', 2.30, 2.28, 0.05, 'maintained'],
+    ['10yd-sprint', 'lower', 2.30, 2.20, 0.05, 'improved'],
+    ['10yd-sprint', 'lower', 2.30, 2.36, 0.05, 'regressed'],
+    ['broad-jump', 'higher', 64, 65, 1, 'maintained'],
+    ['broad-jump', 'higher', 64, 68, 1, 'improved'],
+    ['broad-jump', 'higher', 64, 62, 1, 'regressed'],
+    ['push-ups', 'higher', 20, 21, 1, 'maintained'],
+    ['push-ups', 'higher', 20, 22, 1, 'improved'],
+  ];
+  for (const [id, dir, base, latest, band, expected] of cases) {
+    assert.equal(compareValues(id, base, latest, band).status, expected);
+    assert.equal(UI.trendStatusFor(id, dir, base, latest), expected,
+      `${id} ${base} → ${latest} must be ${expected}`);
+  }
+
+  /* A hand-built series without a precomputed status still renders
+   * the canonical word via the same rule. */
+  const bare = UI.renderTrendChart({
+    testId: '10yd-sprint', label: '10-yd sprint', unit: 'sec', direction: 'lower',
+    baseline: 2.30, latest: 2.25, personalBest: 2.25,
+    points: [{ t: '2026-09-01T00:00:00Z', value: 2.30 }, { t: '2026-09-29T00:00:00Z', value: 2.25 }],
+  });
+  assert.ok(bare.includes('(maintained)'), 'hand-built series agrees too');
+  assert.ok(bare.includes('-0.05 sec'), 'hand-built series keeps exact numbers');
 });
 
 test('trend chart SVG: line, dashed baseline, personal-best star, honest caption', () => {
@@ -489,6 +538,114 @@ test('controller: athlete portal shows only own pathways, no owner console', asy
   assert.ok(!html.includes('Owner console'));
 });
 
+test('controller: CRM detail reloads opportunities/notes/referrals from the server after refresh (G1)', async () => {
+  const doc = makeDoc();
+  const { root } = makeRoot(doc);
+  const client = makeStubClient();
+  const ui = UI.createSaasUI({ root, doc, client });
+  const coachAuth = { authUserId: 'dev-coach-kayla', role: 'coach' };
+  const coach = await client.api.registerCoach(coachAuth,
+    { email: 'kayla@test.invalid', name: 'Coach Kayla' });
+  const reg = await client.api.registerAthlete(
+    { authUserId: 'dev-ath-test', role: 'athlete' },
+    { email: 'a@test.invalid', name: 'Test Athlete', age: 20 });
+  const athleteId = reg.athlete.id;
+  await client.api.linkAthlete(coachAuth, { athleteId });
+  client.setAuth(coachAuth);
+  await ui.switchRole({ role: 'coach', user: 'dev-coach-kayla', label: 'Coach Kayla' });
+
+  // Seed CRM rows through the real API (as the coach would in the UI).
+  const { contact } = await client.api.createRecruitmentContact(coachAuth, {
+    orgName: 'River State University', sport: 'soccer', level: 'collegiate', region: 'WA',
+  });
+  const contactId = contact.id;
+  await client.api.createOpportunity(coachAuth,
+    { contactId, type: 'tryout', date: '2026-12-10T00:00:00Z', notes: 'Showcase invite' });
+  await client.api.addRecruitmentNote(coachAuth,
+    { contactId, body: 'Called — asked for spring film', followUpDate: '2026-12-01T00:00:00Z' });
+  await client.api.referAthlete(coachAuth, { contactId, athleteId });
+
+  // The UI reloads its contacts list after a contact is added;
+  // mirror that here so the detail has a contact to render.
+  await ui.refreshRoleData();
+
+  // Open the contact: the detail loads from the server, not session state.
+  ui.state.crmContactId = contactId;
+  await ui.loadCrmContactDetail(contactId);
+  assert.equal(ui.state.crmActivity.opportunities.length, 1);
+  assert.equal(ui.state.crmActivity.opportunities[0].notes, 'Showcase invite');
+  assert.equal(ui.state.crmActivity.notes.length, 1);
+  assert.equal(ui.state.crmActivity.notes[0].body, 'Called — asked for spring film');
+  assert.equal(ui.state.crmActivity.referrals.length, 1);
+  assert.equal(ui.state.crmActivity.referrals[0].athleteId, athleteId);
+  const html = UI.renderCrm(ui.state, h());
+  assert.ok(html.includes('Showcase invite'), 'opportunity rendered from server data');
+  assert.ok(html.includes('spring film'), 'note rendered from server data');
+  assert.ok(!html.includes('has no list method'), 'session-only honest note is gone');
+
+  // Simulate a refresh: wipe the in-memory activity, reload, rows return.
+  ui.state.crmActivity = { opportunities: [], notes: [], referrals: [] };
+  await ui.loadCrmContactDetail(contactId);
+  assert.equal(ui.state.crmActivity.opportunities.length, 1, 'opportunities survive a refresh');
+  assert.equal(ui.state.crmActivity.notes.length, 1, 'notes survive a refresh');
+  assert.equal(ui.state.crmActivity.referrals.length, 1, 'referrals survive a refresh');
+
+  // Adds also reload from the server (no local push): a second
+  // opportunity appears via the list read, and the count is exact.
+  doc.set('sui-crm-opp-type', 'combine');
+  doc.set('sui-crm-opp-date', '2027-01-15');
+  doc.set('sui-crm-opp-notes', 'Winter combine');
+  await ui.addCrmOpportunity(contactId);
+  assert.equal(ui.state.crmActivity.opportunities.length, 2);
+  assert.ok(ui.state.crmActivity.opportunities.some((o) => o.notes === 'Winter combine'));
+  assert.ok(ui.state.crmActivity.opportunities.some((o) => o.notes === 'Showcase invite'));
+});
+
+test('controller: athlete portal reads own referrals/opportunities from the server (G1/G3)', async () => {
+  const doc = makeDoc();
+  const { root } = makeRoot(doc);
+  const client = makeStubClient();
+  const ui = UI.createSaasUI({ root, doc, client });
+  const coachAuth = { authUserId: 'dev-coach-kayla', role: 'coach' };
+  await client.api.registerCoach(coachAuth, { email: 'kayla@test.invalid', name: 'Coach Kayla' });
+  const reg = await client.api.registerAthlete(
+    { authUserId: 'dev-ath-test', role: 'athlete' },
+    { email: 'a@test.invalid', name: 'Test Athlete', age: 20 });
+  const athleteId = reg.athlete.id;
+  await client.api.linkAthlete(coachAuth, { athleteId });
+  const { contact } = await client.api.createRecruitmentContact(coachAuth, {
+    orgName: 'River State University', sport: 'soccer', level: 'collegiate',
+  });
+  await client.api.createOpportunity(coachAuth,
+    { contactId: contact.id, type: 'tryout', date: '2026-12-10T00:00:00Z', notes: 'Showcase invite' });
+  const { referral } = await client.api.referAthlete(coachAuth, { contactId: contact.id, athleteId });
+  await client.api.updateReferralStatus(coachAuth, { referralId: referral.id, status: 'contacted' });
+
+  client.setAuth({ authUserId: 'dev-ath-test', role: 'athlete' });
+  await ui.switchRole({ role: 'athlete', user: 'dev-ath-test', athleteId, label: 'Athlete' });
+  assert.equal(ui.state.pathways.opportunities.length, 1, 'athlete portal loads own opportunities');
+  assert.equal(ui.state.pathways.opportunities[0].type, 'tryout');
+  assert.equal(ui.state.pathways.opportunities[0].organization, 'River State University');
+  assert.equal(ui.state.pathways.referrals.length, 1, 'athlete portal loads own referrals');
+  assert.equal(ui.state.pathways.referrals[0].status, 'contacted');
+  const html = UI.renderAthletePathways(ui.state, h());
+  assert.ok(html.includes('River State University'), 'organization shown to the athlete');
+  assert.ok(html.includes('tryout'), 'opportunity shown to the athlete');
+  assert.ok(html.includes('contacted'), 'referral stage shown to the athlete');
+  assert.ok(!html.includes('No athlete-facing recruitment list exists'), 'honest empty-state note is gone');
+
+  // An athlete with no referrals sees the empty state, not an error.
+  const other = await client.api.registerAthlete(
+    { authUserId: 'dev-ath-other', role: 'athlete' },
+    { email: 'o@test.invalid', name: 'Other Athlete', age: 22 });
+  client.setAuth({ authUserId: 'dev-ath-other', role: 'athlete' });
+  await ui.switchRole({ role: 'athlete', user: 'dev-ath-other', athleteId: other.athlete.id, label: 'Other' });
+  assert.equal(ui.state.pathways, null, 'no profile and no pipeline means no pathways bundle');
+  const emptyHtml = UI.renderAthletePathways(
+    { pathways: { profile: null, mediaLinks: [], scoutingEvaluations: [], developmentGoals: [], referrals: [], opportunities: [] }, history: null }, h());
+  assert.ok(emptyHtml.includes('No recruitment opportunities yet.'));
+});
+
 /* ---------------- HTTP: dev server ---------------- */
 
 let dev;
@@ -724,6 +881,89 @@ test('HTTP: CRM — contact, opportunity, note, referral, status transitions', a
   assert.equal(moved.json.ok, true);
   assert.equal(moved.json.data.referral.status, 'contacted');
   assert.equal(moved.json.data.referral.outcome, 'Film requested');
+});
+
+test('HTTP: CRM list methods read back opportunities/notes/referrals; athlete sees only own', async () => {
+  const contact = await post('/api/saas', {
+    method: 'createRecruitmentContact',
+    params: {
+      orgName: 'Listback University', sport: 'soccer', level: 'collegiate',
+      region: 'WA', contactName: 'Coach Listback', status: 'new',
+    },
+  }, KAYLA_H);
+  assert.equal(contact.json.ok, true, JSON.stringify(contact.json));
+  const contactId = contact.json.data.contact.id;
+
+  const opp = await post('/api/saas', {
+    method: 'createOpportunity', params: { contactId, type: 'tryout', date: '2026-12-10T00:00:00Z', notes: 'Listback tryout' },
+  }, KAYLA_H);
+  assert.equal(opp.json.ok, true);
+  const note = await post('/api/saas', {
+    method: 'addRecruitmentNote',
+    params: { contactId, body: 'Listback note', followUpDate: '2026-12-01T00:00:00Z' },
+  }, KAYLA_H);
+  assert.equal(note.json.ok, true);
+  const referral = await post('/api/saas', {
+    method: 'referAthlete', params: { contactId, athleteId: YOUTH_ID },
+  }, KAYLA_H);
+  assert.equal(referral.json.ok, true, JSON.stringify(referral.json));
+
+  // Coach reads back exactly what was created, filtered by contact.
+  const opps = await post('/api/saas', { method: 'listOpportunities', params: { contactId } }, KAYLA_H);
+  assert.equal(opps.json.ok, true, JSON.stringify(opps.json));
+  assert.equal(opps.json.data.count, 1);
+  assert.equal(opps.json.data.opportunities[0].notes, 'Listback tryout');
+  assert.equal(opps.json.data.opportunities[0].organization, 'Listback University');
+  const notes = await post('/api/saas', { method: 'listRecruitmentNotes', params: { contactId } }, KAYLA_H);
+  assert.equal(notes.json.ok, true);
+  assert.equal(notes.json.data.count, 1);
+  assert.equal(notes.json.data.notes[0].body, 'Listback note');
+  const refs = await post('/api/saas', { method: 'listReferrals', params: { contactId } }, KAYLA_H);
+  assert.equal(refs.json.ok, true);
+  assert.equal(refs.json.data.count, 1);
+  assert.equal(refs.json.data.referrals[0].athleteId, YOUTH_ID);
+
+  // Empty contact reads back empty, not an error.
+  const empty = await post('/api/saas', {
+    method: 'createRecruitmentContact', params: { orgName: 'Empty Listback College' },
+  }, KAYLA_H);
+  const emptyId = empty.json.data.contact.id;
+  const emptyOpps = await post('/api/saas', { method: 'listOpportunities', params: { contactId: emptyId } }, KAYLA_H);
+  assert.equal(emptyOpps.json.ok, true);
+  assert.deepEqual(emptyOpps.json.data, { opportunities: [], count: 0 });
+
+  // The referred athlete reads their own pipeline; another athlete is refused.
+  const youthOpps = await post('/api/saas', { method: 'listOpportunities', params: { athleteId: YOUTH_ID } }, YOUTH_H);
+  assert.equal(youthOpps.json.ok, true, JSON.stringify(youthOpps.json));
+  assert.ok(youthOpps.json.data.opportunities.some((o) => o.notes === 'Listback tryout'));
+  const youthRefs = await post('/api/saas', { method: 'listReferrals', params: { athleteId: YOUTH_ID } }, YOUTH_H);
+  assert.equal(youthRefs.json.ok, true);
+  assert.ok(youthRefs.json.data.referrals.some((r) => r.contactId === contactId));
+  const other = await post('/api/saas', {
+    method: 'ownerCreateAthlete', params: { name: 'Listback Other', age: 19, sports: ['soccer'] },
+  }, DIRECTOR_H);
+  const otherId = other.json.data.athlete.id;
+  const cross = await post('/api/saas', { method: 'listReferrals', params: { athleteId: otherId } }, YOUTH_H);
+  assert.equal(cross.json.ok, false);
+  assert.equal(cross.json.error.code, 'ATHLETE_NOT_FOUND');
+  const youthNotes = await post('/api/saas', { method: 'listRecruitmentNotes', params: { contactId } }, YOUTH_H);
+  assert.equal(youthNotes.json.ok, false);
+  assert.equal(youthNotes.json.error.code, 'FORBIDDEN', 'notes stay coach-side');
+
+  // An unlinked coach reads nothing of Kayla's contact items.
+  const coachB = await post('/api/saas', {
+    method: 'registerCoach', params: { email: 'listback-b@test.invalid', name: 'Coach Listback B' },
+  }, { 'X-Dev-Role': 'coach', 'X-Dev-User': 'dev-coach-listback-b' });
+  assert.equal(coachB.json.ok, true, JSON.stringify(coachB.json));
+  const bHeaders = { 'X-Dev-Role': 'coach', 'X-Dev-User': 'dev-coach-listback-b' };
+  const bOpps = await post('/api/saas', { method: 'listOpportunities', params: { contactId } }, bHeaders);
+  assert.equal(bOpps.json.ok, false);
+  assert.equal(bOpps.json.error.code, 'FORBIDDEN');
+  const bRefs = await post('/api/saas', { method: 'listReferrals', params: { contactId } }, bHeaders);
+  assert.equal(bRefs.json.error.code, 'FORBIDDEN');
+  const bAll = await post('/api/saas', { method: 'listOpportunities', params: {} }, bHeaders);
+  assert.equal(bAll.json.ok, true);
+  assert.equal(bAll.json.data.count, 0, 'unlinked coach lists nothing');
 });
 
 test('HTTP: sport, goals, evaluations, media links', async () => {

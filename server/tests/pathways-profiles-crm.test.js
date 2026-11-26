@@ -189,6 +189,120 @@ test('CRM: contact CRUD, opportunity, note, referral status transitions', () => 
   assert.equal(mine.count, 1);
 });
 
+test('G1: list methods return what was created; empty lists return empty, not errors', () => {
+  const { api, athA, authA } = freshWorld();
+  const { contact } = api.createRecruitmentContact(authA, {
+    orgName: 'Fictional State University', sport: 'soccer', league: 'NCAA',
+    level: 'collegiate', region: 'WA', contactName: 'Coach Fictional',
+    email: 'recruit@dev.invalid', now: NOW,
+  });
+  const opp = api.createOpportunity(authA,
+    { contactId: contact.id, type: 'tryout', date: '2026-12-05', notes: 'Fictional tryout.', now: NOW });
+  const note = api.addRecruitmentNote(authA,
+    { contactId: contact.id, body: 'Called; left message.', followUpDate: '2026-12-01', now: NOW });
+  const { referral } = api.referAthlete(authA,
+    { contactId: contact.id, athleteId: athA.athlete.id, now: NOW });
+
+  const opps = api.listOpportunities(authA, { contactId: contact.id });
+  assert.equal(opps.count, 1);
+  assert.equal(opps.opportunities[0].id, opp.opportunity.id);
+  assert.equal(opps.opportunities[0].type, 'tryout');
+  assert.equal(opps.opportunities[0].organization, 'Fictional State University');
+
+  const notes = api.listRecruitmentNotes(authA, { contactId: contact.id });
+  assert.equal(notes.count, 1);
+  assert.equal(notes.notes[0].id, note.note.id);
+  assert.equal(notes.notes[0].body, 'Called; left message.');
+
+  const refs = api.listReferrals(authA, { contactId: contact.id });
+  assert.equal(refs.count, 1);
+  assert.equal(refs.referrals[0].id, referral.id);
+  assert.equal(refs.referrals[0].status, 'referred');
+  assert.equal(refs.referrals[0].organization, 'Fictional State University');
+
+  // No-filter coach reads return the same rows (own contacts only).
+  assert.equal(api.listOpportunities(authA, {}).count, 1);
+  assert.equal(api.listRecruitmentNotes(authA, {}).count, 1);
+  assert.equal(api.listReferrals(authA, {}).count, 1);
+
+  // A contact with nothing attached reads back empty, not an error.
+  const empty = api.createRecruitmentContact(authA, { orgName: 'Empty College', now: NOW }).contact;
+  assert.deepEqual(api.listOpportunities(authA, { contactId: empty.id }), { opportunities: [], count: 0 });
+  assert.deepEqual(api.listRecruitmentNotes(authA, { contactId: empty.id }), { notes: [], count: 0 });
+  assert.deepEqual(api.listReferrals(authA, { contactId: empty.id }), { referrals: [], count: 0 });
+
+  // Unknown contact is an input error, not an empty list.
+  assert.equal(codeOf(() => api.listOpportunities(authA, { contactId: 'no-such-contact' })), 'INVALID_INPUT');
+  assert.equal(codeOf(() => api.listRecruitmentNotes(authA, { contactId: 'no-such-contact' })), 'INVALID_INPUT');
+  assert.equal(codeOf(() => api.listReferrals(authA, { contactId: 'no-such-contact' })), 'INVALID_INPUT');
+});
+
+test('G1: cross-coach isolation on list reads; director sees all; notes stay coach-side', () => {
+  const { api, athA, authA, authB } = freshWorld();
+  const { contact } = api.createRecruitmentContact(authA, {
+    orgName: 'Fictional State University', sport: 'soccer', now: NOW,
+  });
+  api.createOpportunity(authA, { contactId: contact.id, type: 'tryout', now: NOW });
+  api.addRecruitmentNote(authA, { contactId: contact.id, body: 'Private note.', now: NOW });
+  api.referAthlete(authA, { contactId: contact.id, athleteId: athA.athlete.id, now: NOW });
+
+  // Coach B cannot read Coach A's contact items, by id or by listing.
+  assert.equal(codeOf(() => api.listOpportunities(authB, { contactId: contact.id })), 'FORBIDDEN');
+  assert.equal(codeOf(() => api.listRecruitmentNotes(authB, { contactId: contact.id })), 'FORBIDDEN');
+  assert.equal(codeOf(() => api.listReferrals(authB, { contactId: contact.id })), 'FORBIDDEN');
+  assert.equal(api.listOpportunities(authB, {}).count, 0);
+  assert.equal(api.listRecruitmentNotes(authB, {}).count, 0);
+  assert.equal(api.listReferrals(authB, {}).count, 0);
+
+  // Director sees everything.
+  assert.equal(api.listOpportunities(DIRECTOR, {}).count, 1);
+  assert.equal(api.listRecruitmentNotes(DIRECTOR, {}).count, 1);
+  assert.equal(api.listReferrals(DIRECTOR, {}).count, 1);
+  assert.equal(api.listOpportunities(DIRECTOR, { contactId: contact.id }).count, 1);
+
+  // Recruitment notes are coach/director-only: athletes may not list them.
+  const athAuthA = { authUserId: 'auth-ath-a', role: 'athlete' };
+  assert.equal(codeOf(() => api.listRecruitmentNotes(athAuthA, { contactId: contact.id })), 'FORBIDDEN');
+});
+
+test('G1: athlete reads only their own referrals and opportunities', () => {
+  const { api, athA, athB, authA } = freshWorld();
+  const athAuthA = { authUserId: 'auth-ath-a', role: 'athlete' };
+  const athAuthB = { authUserId: 'auth-ath-b', role: 'athlete' };
+  const { contact } = api.createRecruitmentContact(authA, {
+    orgName: 'Fictional State University', sport: 'soccer', now: NOW,
+  });
+  api.createOpportunity(authA, { contactId: contact.id, type: 'tryout', date: '2026-12-05', now: NOW });
+  api.referAthlete(authA, { contactId: contact.id, athleteId: athA.athlete.id, now: NOW });
+  // A second contact with an opportunity but NO referral for Athlete A.
+  const other = api.createRecruitmentContact(authA, { orgName: 'Unreferred College', now: NOW }).contact;
+  api.createOpportunity(authA, { contactId: other.id, type: 'combine', now: NOW });
+
+  // Own referrals, by athlete and by contact.
+  const mine = api.listReferrals(athAuthA, { athleteId: athA.athlete.id });
+  assert.equal(mine.count, 1);
+  assert.equal(mine.referrals[0].athleteId, athA.athlete.id);
+  assert.equal(api.listReferrals(athAuthA, { contactId: contact.id }).count, 1);
+  assert.equal(api.listReferrals(athAuthA, {}).count, 1);
+  // Another athlete's id is a cross-tenant read, never a leak.
+  assert.equal(codeOf(() => api.listReferrals(athAuthA, { athleteId: athB.athlete.id })), 'ATHLETE_NOT_FOUND');
+  assert.equal(codeOf(() => api.listOpportunities(athAuthA, { athleteId: athB.athlete.id })), 'ATHLETE_NOT_FOUND');
+
+  // Opportunities: only on contacts the athlete was referred to.
+  const opps = api.listOpportunities(athAuthA, { athleteId: athA.athlete.id });
+  assert.equal(opps.count, 1);
+  assert.equal(opps.opportunities[0].type, 'tryout');
+  assert.equal(opps.opportunities[0].organization, 'Fictional State University');
+  assert.equal(api.listOpportunities(athAuthA, { contactId: contact.id }).count, 1);
+  assert.equal(api.listOpportunities(athAuthA, {}).count, 1);
+
+  // Athlete B was referred to nothing: empty everywhere, never A's rows.
+  assert.equal(api.listReferrals(athAuthB, {}).count, 0);
+  assert.equal(api.listOpportunities(athAuthB, {}).count, 0);
+  assert.equal(api.listReferrals(athAuthB, { contactId: contact.id }).count, 0);
+  assert.equal(api.listOpportunities(athAuthB, { contactId: contact.id }).count, 0);
+});
+
 test('media links are URL-only: non-URLs refused, no upload path exists', () => {
   const { api, athA, authA, athAuthA } = freshWorld();
   const profile = makeProfile(api, authA, athA.athlete.id);
