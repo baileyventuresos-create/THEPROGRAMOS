@@ -4,7 +4,9 @@
  * Resolves effective access from live rows, in the priority order
  * fixed by docs/SAAS_ARCHITECTURE.md §2.2/§2.3:
  *
- *   Athlete: (1) active in-person memberships row ($149) -> full
+ *   Athlete: (0) active complimentary grant (owner-granted) -> full
+ *            paid remote access, never a charge;
+ *            (1) active in-person memberships row ($149) -> full
  *            paid remote access, never a second charge;
  *            (2) active sponsorship whose sponsor subscription is
  *            active/trialing -> paid access at the sponsor's tier;
@@ -83,11 +85,25 @@ function planLimits(store, planCode) {
 }
 
 /* Athlete entitlements. Returns:
- * { tier: 'member'|'sponsored'|'paid'|'free', planCode, source,
+ * { tier: 'complimentary'|'member'|'sponsored'|'paid'|'free', planCode, source,
  *   fullHistory: bool, historyDays: number|null,
  *   maxCoachLinks: number|null, trainingDaysPerWeek: number|null,
- *   subscriptionId?, sponsorshipId?, membershipId? } */
+ *   subscriptionId?, sponsorshipId?, membershipId?, grantId? } */
 function resolveAthleteEntitlements(store, athleteId, now = Date.now()) {
+  // (0) Complimentary grant (owner-granted) -> full remote access, no charge.
+  // Beats every other source, same shape as the sponsorship branch.
+  if (typeof store.activeComplimentaryGrantsFor === 'function') {
+    const grant = store.activeComplimentaryGrantsFor(athleteId, now)[0];
+    if (grant) {
+      const limits = planLimits(store, 'athlete_remote');
+      return {
+        tier: 'complimentary', planCode: 'athlete_remote', source: 'complimentary_grant',
+        fullHistory: true, historyDays: null, maxCoachLinks: null,
+        trainingDaysPerWeek: null, grantId: grant.id || null,
+        limits,
+      };
+    }
+  }
   // (1) In-person membership -> full remote access, no second charge.
   const membership = store.membershipsFor(athleteId).find(m => membershipCovers(m, now));
   if (membership) {

@@ -99,6 +99,17 @@ class MemorySaasStore {
     this.billingEvents = new Map();   // providerEventId -> row
     this.memberships = [];            // in-person $149 memberships (existing table shape)
     this.auditEvents = [];            // {actor, action, detail, at}
+    // Athlete Pathways V1 (migration 009 shape, memory mirror).
+    this.complimentaryGrants = [];    // {id, athleteId, grantedBy, grantedAt, expiresAt, status, reason, revokedAt}
+    this.prospectProfiles = new Map(); // id -> prospect profile row
+    this.profileShares = [];          // {id, profileId, tokenHash, expiresAt, revokedAt, status, createdBy}
+    this.recruitmentContacts = new Map(); // id -> recruitment contact row
+    this.recruitmentOpportunities = [];   // {id, contactId, type, date, notes, createdBy}
+    this.recruitmentNotes = [];       // {id, contactId, author, body, followUpDate, createdAt}
+    this.referrals = [];              // {id, contactId, athleteId, status, outcome, referredAt, referredBy}
+    this.prospectMediaLinks = [];     // {id, profileId, kind, url, title, approvedBy, approvedAt}
+    this.developmentGoals = [];       // {id, athleteId, coachId, goal, targetDate, status}
+    this.scoutingEvaluations = [];    // {id, athleteId, coachId, body, coachApproved, approvedBy, approvedAt, createdAt}
     this.plans = JSON.parse(JSON.stringify(PLANS));
 
     this.organizations.set(PROGRAM_INTERNAL_ORG_ID, {
@@ -200,6 +211,53 @@ class MemorySaasStore {
   }
   membershipsFor(athleteId) {
     return this.memberships.filter(m => m.athleteId === athleteId);
+  }
+
+  /* --- complimentary grants (Pathways G1) --- */
+  activeComplimentaryGrantsFor(athleteId, now = Date.now()) {
+    return this.complimentaryGrants.filter(g => g.athleteId === athleteId
+      && g.status === 'active'
+      && (g.expiresAt == null || Date.parse(g.expiresAt) > now));
+  }
+  complimentaryGrantById(id) {
+    return this.complimentaryGrants.find(g => g.id === String(id)) || null;
+  }
+
+  /* --- prospect profiles / shares (Pathways G3) --- */
+  prospectProfileById(id) { return this.prospectProfiles.get(String(id)) || null; }
+  prospectProfileByAthlete(athleteId) {
+    for (const p of this.prospectProfiles.values()) if (p.athleteId === athleteId) return p;
+    return null;
+  }
+  profileShareByTokenHash(tokenHash) {
+    return this.profileShares.find(s => s.tokenHash === tokenHash) || null;
+  }
+  profileSharesFor(profileId) {
+    return this.profileShares.filter(s => s.profileId === profileId);
+  }
+  mediaLinksForProfile(profileId) {
+    return this.prospectMediaLinks.filter(m => m.profileId === profileId);
+  }
+
+  /* --- recruitment CRM (Pathways G4) --- */
+  recruitmentContactById(id) { return this.recruitmentContacts.get(String(id)) || null; }
+  referralById(id) { return this.referrals.find(r => r.id === String(id)) || null; }
+  opportunitiesForContact(contactId) {
+    return this.recruitmentOpportunities.filter(o => o.contactId === contactId);
+  }
+  notesForContact(contactId) {
+    return this.recruitmentNotes.filter(n => n.contactId === contactId);
+  }
+  referralsForContact(contactId) {
+    return this.referrals.filter(r => r.contactId === contactId);
+  }
+
+  /* --- development goals / scouting evaluations (Pathways G6) --- */
+  goalsForAthlete(athleteId) {
+    return this.developmentGoals.filter(g => g.athleteId === athleteId);
+  }
+  evaluationsForAthlete(athleteId) {
+    return this.scoutingEvaluations.filter(e => e.athleteId === athleteId);
   }
 }
 
