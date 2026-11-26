@@ -1,0 +1,175 @@
+{
+  "generatedBy": "server/fixtures/generate-75-scenario.js",
+  "members": 75,
+  "sessionsPerAthletePerWeek": 2,
+  "assumptionNote": "Demand assumes each member books 2 sessions/week (prototype twice-weekly cadence). Staffing assumes the prototype default of 3 coaches per group session / 1 per small group — the prototype flags who the 2nd/3rd coaches are as NEEDS DEFINITION, so this model is conditional on that staffing being hired/confirmed.",
+  "totalEnrollmentCap": 111,
+  "sessionsPerWeek": 13,
+  "weeklySeatSupply": 205,
+  "weeklyDemand": 150,
+  "headroomSeatsPerWeek": 55,
+  "utilizationAtDemand": 0.732,
+  "monthlyRevenueAtFullMembership": 1117500,
+  "monthlyRevenueDollars": 11175,
+  "fits": true,
+  "perCohort": [
+    {
+      "cohort": "YAK-A",
+      "location": "YAK",
+      "daysPerWeek": 2,
+      "enrolledDemo": 16,
+      "enrollmentCap": 20,
+      "coachesAvailable": 3,
+      "template": "p60",
+      "sessionPreferredCap": 18,
+      "sessionEffectiveCap": 18,
+      "weeklySeats": 36,
+      "limitingFactors": [
+        "coached stations (preferred)=18",
+        "hard cap=18",
+        "largest fitting preferred layout=18",
+        "cohort enrollment cap=20"
+      ],
+      "warnings": [
+        "No planned games supplied: hard cap falls back to preferred cap. Plan the session (human-approved draft) before raising capacity.",
+        "Facility occupancy not fully specified (0/2 spaces have a maxAthletes value); facility does not bind this cap. Operator must set occupancy before it can constrain reservations."
+      ]
+    },
+    {
+      "cohort": "YAK-B",
+      "location": "YAK",
+      "daysPerWeek": 2,
+      "enrolledDemo": 14,
+      "enrollmentCap": 20,
+      "coachesAvailable": 3,
+      "template": "p60",
+      "sessionPreferredCap": 18,
+      "sessionEffectiveCap": 18,
+      "weeklySeats": 36,
+      "limitingFactors": [
+        "coached stations (preferred)=18",
+        "hard cap=18",
+        "largest fitting preferred layout=18",
+        "cohort enrollment cap=20"
+      ],
+      "warnings": [
+        "No planned games supplied: hard cap falls back to preferred cap. Plan the session (human-approved draft) before raising capacity.",
+        "Facility occupancy not fully specified (0/2 spaces have a maxAthletes value); facility does not bind this cap. Operator must set occupancy before it can constrain reservations."
+      ]
+    },
+    {
+      "cohort": "YAK-C",
+      "location": "YAK",
+      "daysPerWeek": 2,
+      "enrolledDemo": 9,
+      "enrollmentCap": 16,
+      "coachesAvailable": 3,
+      "template": "p60",
+      "sessionPreferredCap": 18,
+      "sessionEffectiveCap": 16,
+      "weeklySeats": 32,
+      "limitingFactors": [
+        "coached stations (preferred)=18",
+        "hard cap=18",
+        "largest fitting preferred layout=18",
+        "cohort enrollment cap=16"
+      ],
+      "warnings": [
+        "No planned games supplied: hard cap falls back to preferred cap. Plan the session (human-approved draft) before raising capacity.",
+        "Facility occupancy not fully specified (0/2 spaces have a maxAthletes value); facility does not bind this cap. Operator must set occupancy before it can constrain reservations.",
+        "Effective cap 16 is below preferred 18; binding constraint: cohort enrollment cap. Do not raise it without adding coaches, space, or equipment."
+      ]
+    },
+    {
+      "cohort": "ELL-A",
+      "location": "ELL",
+      "daysPerWeek": 2,
+      "enrolledDemo": 14,
+      "enrollmentCap": 20,
+      "coachesAvailable": 3,
+      "template": "p60",
+      "sessionPreferredCap": 18,
+      "sessionEffectiveCap": 18,
+      "weeklySeats": 36,
+      "limitingFactors": [
+        "coached stations (preferred)=18",
+        "hard cap=18",
+        "largest fitting preferred layout=18",
+        "cohort enrollment cap=20"
+      ],
+      "warnings": [
+        "No planned games supplied: hard cap falls back to preferred cap. Plan the session (human-approved draft) before raising capacity.",
+        "Facility occupancy not fully specified (0/2 spaces have a maxAthletes value); facility does not bind this cap. Operator must set occupancy before it can constrain reservations."
+      ]
+    },
+    {
+      "cohort": "ELL-B",
+      "location": "ELL",
+      "daysPerWeek": 2,
+      "enrolledDemo": 11,
+      "enrollmentCap": 16,
+      "coachesAvailable": 3,
+      "template": "p60",
+      "sessionPreferredCap": 18,
+      "sessionEffectiveCap": 16,
+      "weeklySeats": 32,
+      "limitingFactors": [
+        "coached stations (preferred)=18",
+        "hard cap=18",
+        "largest fitting preferred layout=18",
+        "cohort enrollment cap=16"
+      ],
+      "warnings": [
+        "No planned games supplied: hard cap falls back to preferred cap. Plan the session (human-approved draft) before raising capacity.",
+        "Facility occupancy not fully specified (0/2 spaces have a maxAthletes value); facility does not bind this cap. Operator must set occupancy before it can constrain reservations.",
+        "Effective cap 16 is below preferred 18; binding constraint: cohort enrollment cap. Do not raise it without adding coaches, space, or equipment."
+      ]
+    },
+    {
+      "cohort": "CLE-A",
+      "location": "CLE",
+      "daysPerWeek": 2,
+      "enrolledDemo": 12,
+      "enrollmentCap": 14,
+      "coachesAvailable": 3,
+      "template": "p60",
+      "sessionPreferredCap": 18,
+      "sessionEffectiveCap": 14,
+      "weeklySeats": 28,
+      "limitingFactors": [
+        "coached stations (preferred)=18",
+        "hard cap=18",
+        "largest fitting preferred layout=18",
+        "cohort enrollment cap=14"
+      ],
+      "warnings": [
+        "No planned games supplied: hard cap falls back to preferred cap. Plan the session (human-approved draft) before raising capacity.",
+        "Facility occupancy not fully specified (0/1 spaces have a maxAthletes value); facility does not bind this cap. Operator must set occupancy before it can constrain reservations.",
+        "Effective cap 14 is below preferred 18; binding constraint: cohort enrollment cap. Do not raise it without adding coaches, space, or equipment."
+      ]
+    },
+    {
+      "cohort": "CLE-B",
+      "location": "CLE",
+      "daysPerWeek": 1,
+      "enrolledDemo": 4,
+      "enrollmentCap": 5,
+      "coachesAvailable": 1,
+      "template": "sg45",
+      "sessionPreferredCap": 6,
+      "sessionEffectiveCap": 5,
+      "weeklySeats": 5,
+      "limitingFactors": [
+        "coached stations (preferred)=6",
+        "hard cap=6",
+        "largest fitting preferred layout=40",
+        "cohort enrollment cap=5"
+      ],
+      "warnings": [
+        "No planned games supplied: hard cap falls back to preferred cap. Plan the session (human-approved draft) before raising capacity.",
+        "Facility occupancy not fully specified (0/1 spaces have a maxAthletes value); facility does not bind this cap. Operator must set occupancy before it can constrain reservations.",
+        "Effective cap 5 is below preferred 6; binding constraint: cohort enrollment cap. Do not raise it without adding coaches, space, or equipment."
+      ]
+    }
+  ]
+}
