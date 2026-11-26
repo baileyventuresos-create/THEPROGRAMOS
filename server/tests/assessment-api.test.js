@@ -86,6 +86,80 @@ test('a client-supplied actor is ignored: the recorded coach is always the auth 
   assert.equal(view.history[0].coachId, 'coach-marcus');
 });
 
+/* org_admin read-only scope (SaaS validation fix, 2026-11-20):
+ * the role table grants org_admin the read methods only, and the
+ * access directory scopes those reads to athletes linked inside
+ * orgs the caller admins. Recording stays coach/director. */
+const ORG_ADMIN = { authUserId: 'auth-org-admin', role: 'org_admin' };
+const ORG_ADMIN_OUT = { authUserId: 'auth-org-admin-other', role: 'org_admin' };
+const ORG_READ_METHODS = ['listAthletes', 'athleteAssessmentView', 'planReadiness', 'advisoryPriorities'];
+const ORG_WRITE_METHODS = ['startAssessment', 'recordAttempts', 'getDraft', 'discardDraft',
+  'completeAssessment', 'coachDashboard', 'recordDeferral', 'createPlan', 'finalizePlan'];
+
+function freshOrgApi() {
+  const directory = createAccessDirectory({
+    athletes: [
+      { ...Wingback.athlete, coachIds: [], guardianUserIds: [], authUserId: 'athlete-wingback-uid' },
+      { ...Youth.athlete, coachIds: [], guardianUserIds: ['parent-youth-uid'], authUserId: 'athlete-youth-uid' },
+    ],
+    coachAuth: { 'auth-coach-marcus': 'coach-marcus' },
+    links: [
+      { coachId: 'coach-marcus', athleteId: W, organizationId: 'org-1', status: 'active' },
+      { coachId: 'coach-other', athleteId: Y, organizationId: 'org-2', status: 'active' },
+    ],
+    orgMemberships: [
+      { authUserId: 'auth-org-admin', organizationId: 'org-1', orgRole: 'org_admin', status: 'active' },
+      { authUserId: 'auth-org-admin-other', organizationId: 'org-2', orgRole: 'org_admin', status: 'active' },
+    ],
+  });
+  const wf = createAssessmentWorkflow({
+    store: new MemoryAssessmentStore(), reassessmentStore: new MemoryReassessmentStore(),
+    planStore: new MemoryPlanStore(), directory,
+  });
+  return { api: createAssessmentApi({ workflow: wf }), wf };
+}
+
+test('org_admin is granted on exactly the read methods, never on writes', () => {
+  for (const method of ORG_READ_METHODS) {
+    assert.ok(ALLOWED[method].includes('org_admin'), `${method} allows org_admin (read)`);
+  }
+  for (const method of ORG_WRITE_METHODS) {
+    assert.ok(!ALLOWED[method].includes('org_admin'), `${method} must not allow org_admin`);
+  }
+});
+
+test('org_admin views assessments of athletes linked inside their org', async () => {
+  const { api } = freshOrgApi();
+  const view = await api.athleteAssessmentView(ORG_ADMIN, { athleteId: W });
+  assert.equal(view.athleteId, W);
+  const listed = api.listAthletes(ORG_ADMIN);
+  assert.deepEqual(listed.map(a => a.id), [W], 'only the in-org linked athlete is listed');
+  const readiness = await api.planReadiness(ORG_ADMIN, { athleteId: W });
+  assert.equal(readiness.athleteId, W);
+  const advisory = await api.advisoryPriorities(ORG_ADMIN, { athleteId: W });
+  assert.equal(advisory.athleteId, W);
+});
+
+test('org_admin cannot see athletes outside their org', async () => {
+  const { api } = freshOrgApi();
+  await assert.rejects(() => api.athleteAssessmentView(ORG_ADMIN, { athleteId: Y }), e => e.code === 'FORBIDDEN');
+  await assert.rejects(() => api.planReadiness(ORG_ADMIN, { athleteId: Y }), e => e.code === 'FORBIDDEN');
+  await assert.rejects(() => api.advisoryPriorities(ORG_ADMIN, { athleteId: Y }), e => e.code === 'FORBIDDEN');
+  // The other org's admin sees only their own org's athlete.
+  const otherView = await api.athleteAssessmentView(ORG_ADMIN_OUT, { athleteId: Y });
+  assert.equal(otherView.athleteId, Y);
+  await assert.rejects(() => api.athleteAssessmentView(ORG_ADMIN_OUT, { athleteId: W }), e => e.code === 'FORBIDDEN');
+});
+
+test('org_admin cannot record, draft, defer, or plan (read-only scope)', async () => {
+  const { api } = freshOrgApi();
+  for (const method of ORG_WRITE_METHODS) {
+    await assert.rejects(
+      () => api[method](ORG_ADMIN, { athleteId: W, planId: 'any-plan', entries: Wingback.baseline.entries }),
+      e => e.code === 'FORBIDDEN', `${method} forbids org_admin`);
+  }
+});
+
 test('invalid input is rejected before any workflow call', async () => {
   const { api } = freshApi();
   await assert.rejects(() => api.completeAssessment(COACH, {}), e => e.code === 'INVALID_INPUT');

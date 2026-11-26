@@ -20,7 +20,7 @@
 //     (server/assessment-access.js); the 004 coach INSERT policies
 //     mirror that scope in SQL.
 
-export type Role = "director" | "coach" | "parent" | "athlete";
+export type Role = "director" | "coach" | "parent" | "athlete" | "org_admin";
 
 export interface AuthContext {
   authUserId: string;
@@ -29,20 +29,29 @@ export interface AuthContext {
   athleteId?: string | null;
 }
 
+// org_admin (SaaS validation fix, 2026-11-20): read-only scope over
+// athletes linked inside orgs they admin. Granted on the read methods
+// only (listAthletes, athleteAssessmentView, planReadiness,
+// advisoryPriorities) — never on recording/writing methods, getDraft,
+// or coachDashboard. Mirrors server/assessment-api.js ALLOWED exactly
+// (pinned by server/tests/edge-function.test.js). NOTE: directory.ts
+// does not yet build SaaS links/orgMemberships, so Edge org_admin
+// scope stays empty until that deploy-time wiring lands; the Node/dev
+// path is fully wired.
 export const ALLOWED: Record<string, Role[]> = {
-  listAthletes: ["director", "coach", "parent", "athlete"],
+  listAthletes: ["director", "coach", "parent", "athlete", "org_admin"],
   startAssessment: ["director", "coach"],
   recordAttempts: ["director", "coach"],
   getDraft: ["director", "coach"],
   discardDraft: ["director", "coach"],
   completeAssessment: ["director", "coach"],
-  athleteAssessmentView: ["director", "coach", "parent", "athlete"],
+  athleteAssessmentView: ["director", "coach", "parent", "athlete", "org_admin"],
   coachDashboard: ["director", "coach"],
   recordDeferral: ["director", "coach"],
-  planReadiness: ["director", "coach", "parent", "athlete"],
+  planReadiness: ["director", "coach", "parent", "athlete", "org_admin"],
   createPlan: ["director", "coach"],
   finalizePlan: ["director", "coach"],
-  advisoryPriorities: ["director", "coach", "parent", "athlete"],
+  advisoryPriorities: ["director", "coach", "parent", "athlete", "org_admin"],
 };
 
 export type Workflow = Record<

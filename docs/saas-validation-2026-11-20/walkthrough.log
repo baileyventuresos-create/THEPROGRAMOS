@@ -1,0 +1,43 @@
+Dev server: http://127.0.0.1:35615
+PASS J1-UI homepage renders live pricing cards :: plan cards=6
+PASS J1-UI homepage shows test-mode banner + hero :: testbar + hero present
+PASS J1-UI homepage has Log in / Create account CTAs :: CTAs present
+  screenshot: 01-homepage-desktop.png
+  screenshot: 02-homepage-pricing-desktop.png
+PASS APP SaaS hub renders and connects :: hub panel + Connected label visible
+  screenshot: 03-app-hub-overview-desktop.png
+PASS J2-UI youth athlete sees Athlete Free tier :: tier label visible
+PASS J2-UI seeded assessment history visible in athlete history :: history section mentions assessments
+  screenshot: 04-athlete-free-youth-desktop.png
+  screenshot: 05-plans-tab-desktop.png
+PASS J2-UI test checkout flips youth to paid tier in UI (DOM updates after confirm) :: paid tier label after confirm
+  screenshot: 06-athlete-paid-after-checkout-desktop.png
+PASS J10-UI wingback shows member tier + ALREADY_COVERED honesty copy :: member label + covered copy present
+  screenshot: 07-wingback-member-desktop.png
+PASS J10-UI member checkout attempt refused with ALREADY_COVERED in UI :: error code surfaced in UI
+  screenshot: 08-wingback-checkout-refused-desktop.png
+PASS J5-UI coach roster shows seeded links + cap label n of 15 :: cap label visible
+  screenshot: 09-coach-roster-kayla-desktop.png
+PASS J4-UI assign action available on roster athlete :: assign-open button found
+PASS J4-UI Safety Review game checkbox disabled in composer :: TP2-084 disabled=true
+  screenshot: 10-coach-assignment-composer-desktop.png
+PASS J4-UI athlete sees coach-assigned training :: assignment title visible
+PASS J4-UI completion recorded and history updates in UI :: completed status visible
+  screenshot: 11-athlete-completed-history-desktop.png
+PASS J6-UI Assessments section reachable in app :: nav="Assessments"
+  screenshot: 12-assessments-section-desktop.png
+PASS J7-UI organization created from UI (identity flips to org_admin) :: org UI reflects creation
+  screenshot: 13-org-created-desktop.png
+  screenshot: 14-org-overview-desktop.png
+PASS J7-UI org overview renders coaches/athletes :: overview content visible
+PASS J8-UI Jordan roster excludes Kayla athletes in UI :: roster ids=["dev-ath-04","dev-ath-05"]
+  screenshot: 15-coach-roster-jordan-desktop.png
+PASS MOB homepage has no horizontal overflow at 390px :: overflow=0px
+  screenshot: 16-homepage-mobile-390.png
+PASS MOB app athlete view has no horizontal overflow at 390px :: overflow=0px
+  screenshot: 17-athlete-mobile-390.png
+PASS MOB app coach view has no horizontal overflow at 390px :: overflow=0px
+  screenshot: 18-coach-mobile-390.png
+PASS APP no app console/page errors during walkthrough (font/404 network noise excluded) :: clean (5 network-noise entries excluded)
+
+TOTAL: 22 passed, 0 failed

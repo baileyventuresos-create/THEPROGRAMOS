@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>THE PROGRAM — Test. Train. Retest. Every 28 days.</title>
+<meta name="description" content="The Program is an assessment-driven athlete-development system for youth through adult athletes: a standardized 8-test battery repeated every 28 days, 130 coach-led movement games, and progress you can see.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=Public+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap">
+<style>
+/* Public homepage — standalone static page (first anonymous surface).
+ * Design tokens mirror THE PROGRAM OS.html so the public face and
+ * the product read as one system. No athlete data, no auth state:
+ * pricing is fetched from GET /api/saas/plans with a static
+ * fallback, and billing is TEST MODE only until separately
+ * approved — labelled as such everywhere it appears. */
+:root{
+  --bg:#ECEEED; --surface:#F8F9F8; --sunk:#E2E5E3; --ink:#121514; --muted:#59625E; --line:#C7CDCA; --line-strong:#9AA39F;
+  --tape:#F2C300; --tape-ink:#121514; --side:#121514; --side-ink:#ECEEED; --side-muted:#8E9893;
+  --ok:#2B7349;
+  --display:"Archivo","Arial Narrow","Helvetica Neue",Arial,sans-serif;
+  --body:"Public Sans","Helvetica Neue",Arial,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#0E1110; --surface:#161A19; --sunk:#1D2221; --ink:#E7EBE9; --muted:#97A29D; --line:#2A312F; --line-strong:#46504C;
+  --ok:#5FC98D; color-scheme:dark }}
+:root[data-theme="dark"]{
+  --bg:#0E1110; --surface:#161A19; --sunk:#1D2221; --ink:#E7EBE9; --muted:#97A29D; --line:#2A312F; --line-strong:#46504C;
+  --ok:#5FC98D; color-scheme:dark }
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased}
+a{color:inherit}
+.wrap{max-width:1080px;margin:0 auto;padding:0 20px}
+.disp{font-family:var(--display);font-stretch:72%;font-weight:850;text-transform:uppercase;letter-spacing:.005em;line-height:.95;text-wrap:balance}
+.eyebrow{font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.muted{color:var(--muted)}
+.small{font-size:12.5px}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.testbar{background:var(--tape);color:var(--tape-ink);font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;padding:6px 20px;text-align:center}
+.topbar{display:flex;align-items:center;gap:16px;padding:12px 20px;border-bottom:1px solid var(--line);background:var(--surface);flex-wrap:wrap}
+.brand{display:flex;align-items:baseline;gap:10px}
+.brand .wm{font-family:var(--display);font-stretch:62%;font-weight:900;font-size:24px;line-height:1}
+.brand .wm span{display:inline-block;background:var(--ink);color:var(--bg);padding:1px 5px 0;margin-right:3px}
+.brand .tag{font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--muted)}
+.nav{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--ink);background:transparent;padding:8px 14px;font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;line-height:1.2;text-decoration:none}
+.btn:hover{background:var(--sunk)}
+.btn.solid{background:var(--ink);color:var(--bg)}
+.btn.tape{background:var(--tape);color:var(--tape-ink);border-color:var(--tape)}
+.btn.ghost{border-color:var(--line-strong)}
+.btn.sm{padding:4px 8px;font-size:10px}
+.hero{padding:56px 0 40px}
+.hero h1{font-size:clamp(38px,7vw,72px);margin:10px 0 14px}
+.hero .lede{max-width:62ch;color:var(--muted);font-size:17px;margin:0 0 20px}
+.cta-row{display:flex;gap:10px;flex-wrap:wrap}
+.cycle{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin:28px 0}
+.step{background:var(--surface);border:1px solid var(--line);padding:16px;min-width:0}
+.step .n{font-family:var(--mono);font-size:12px;color:var(--muted)}
+.step h3{font-family:var(--display);font-stretch:78%;font-weight:800;font-size:20px;text-transform:uppercase;margin:6px 0}
+.step p{margin:0;color:var(--muted);font-size:14px}
+section{padding:28px 0}
+section h2{font-size:clamp(26px,4vw,38px);margin:6px 0 10px}
+.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.card{background:var(--surface);border:1px solid var(--line);padding:16px;min-width:0}
+.card h3{font-family:var(--display);font-stretch:78%;font-weight:800;font-size:18px;text-transform:uppercase;margin:6px 0}
+.card p{color:var(--muted);font-size:14px;margin:0 0 12px}
+.toggle{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0}
+.toggle button{font:inherit}
+.toggle button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+.plans{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px}
+.plan{background:var(--surface);border:1px solid var(--line);padding:16px;min-width:0;display:flex;flex-direction:column}
+.plan .price{font-family:var(--mono);font-size:26px;font-weight:700;margin:6px 0}
+.plan ul{margin:8px 0 14px;padding-left:18px;color:var(--muted);font-size:13.5px}
+.plan .spacer{margin-top:auto}
+.note{border:1px solid var(--line);background:var(--sunk);padding:10px 14px;font-size:13px;margin:14px 0}
+footer{border-top:1px solid var(--line);padding:24px 0 40px;color:var(--muted);font-size:13px}
+@media (max-width:760px){
+  .cycle,.grid3{grid-template-columns:minmax(0,1fr)}
+  .hero{padding:36px 0 24px}
+}
+</style>
+</head>
+<body>
+<div class="testbar">Test mode — billing is simulated. No real charge, no card, no live billing.</div>
+<header class="topbar">
+  <div class="brand"><span class="wm"><span>THE</span>PROGRAM</span><span class="tag">PLAY WITH PURPOSE.</span></div>
+  <nav class="nav" aria-label="Primary">
+    <a class="btn ghost" href="#approach">Approach</a>
+    <a class="btn ghost" href="#pricing">Pricing</a>
+    <a class="btn" href="./index.html">Log in</a>
+    <a class="btn tape" href="./index.html">Create account</a>
+  </nav>
+</header>
+
+<main class="wrap">
+  <div class="hero">
+    <div class="eyebrow">Assessment-driven athlete development · youth through adult</div>
+    <h1 class="disp">Test. Train. Retest.<br>Every 28 days.</h1>
+    <p class="lede">Every other platform starts with programming. The Program starts with measurement: a standardized
+      8-test athletic assessment, repeated every 28 days, coach-administered and coach-verified — with 130 movement
+      games prescribed against what the assessment actually shows. No automatic prescriptions from scores. The coach
+      always decides; the system makes sure the decision is based on evidence.</p>
+    <div class="cta-row">
+      <a class="btn solid" href="./index.html">Create a free athlete account</a>
+      <a class="btn" href="./index.html">Start a coach trial</a>
+      <a class="btn ghost" href="#pricing">See pricing</a>
+    </div>
+
+    <div class="cycle" aria-label="How it works">
+      <div class="step"><div class="n">01 · TEST</div><h3>Measure</h3>
+        <p>Your coach runs the GAA battery — sprint, jump, shuttle, strength-endurance, balance, and a 6-minute
+        walk/run — under standardized protocols. Results are coach-recorded measurements, with the method attached.</p></div>
+      <div class="step"><div class="n">02 · TRAIN</div><h3>Develop</h3>
+        <p>Your coach assigns training from the 130-game movement library — in person, remote, or both — and sets
+        the dose. You record completions; your history builds.</p></div>
+      <div class="step"><div class="n">03 · RETEST</div><h3>Prove it</h3>
+        <p>28 days later, you test again. Baseline, previous, personal best — progress you, your parent, and your
+        coach can all see. Then the cycle repeats.</p></div>
+    </div>
+    <p class="small muted">The GAA battery is a standardized field protocol that has not yet been field-validated.
+      Results are presented as coach-recorded measurements only — never as norms, percentiles, rankings, or diagnoses.</p>
+  </div>
+
+  <section id="approach">
+    <div class="eyebrow">Who it's for</div>
+    <h2 class="disp">One system, three doors</h2>
+    <div class="grid3">
+      <div class="card">
+        <div class="eyebrow">Athletes</div>
+        <h3>Know where you stand</h3>
+        <p>Train what matters and prove it in 28 days. Start free forever — one real training day a week, your
+          results and progress when a coach tests you — or go Remote for full history and unlimited coach links.</p>
+        <a class="btn sm" href="./index.html">Athlete sign-up</a>
+      </div>
+      <div class="card">
+        <div class="eyebrow">Coaches</div>
+        <h3>Sell development you can demonstrate</h3>
+        <p>Roster, assessments, assignments, and progress parents can see — not another workout builder. The
+          battery is included on every plan. 14-day free trial, no card.</p>
+        <a class="btn sm" href="./index.html">Coach sign-up</a>
+      </div>
+      <div class="card">
+        <div class="eyebrow">Teams &amp; academies</div>
+        <h3>Every athlete, every cycle</h3>
+        <p>One organization, unlimited coaches, every team on the same 28-day cycle — assessment compliance you
+          can see across the whole roster, without an enterprise sales process.</p>
+        <a class="btn sm" href="./index.html">Organization sign-up</a>
+      </div>
+    </div>
+    <p class="small muted" style="margin-top:14px">Already train with The Program in person? Your $149/month membership
+      includes full remote access — you are never charged twice. Athletes sponsored by a coach or organization are
+      never charged either.</p>
+  </section>
+
+  <section id="pricing">
+    <div class="eyebrow">Pricing</div>
+    <h2 class="disp">Simple bands, assessment included</h2>
+    <p class="muted" style="max-width:62ch">Coaches and organizations pay by roster band; attached athletes are free.
+      Annual billing is 10× monthly (two months free). Overage beyond a band is per-athlete and always confirmed —
+      never a silent cliff jump. No platform percentage on payments.</p>
+    <div class="toggle" role="group" aria-label="Billing interval">
+      <button class="btn sm" id="btn-month" aria-pressed="true" type="button">Monthly</button>
+      <button class="btn sm" id="btn-year" aria-pressed="false" type="button">Annual (2 months free)</button>
+    </div>
+    <div id="plans" class="plans" aria-live="polite">
+      <p class="muted">Loading plans…</p>
+    </div>
+    <div class="note"><b>Test mode:</b> prices shown are research recommendations served by the development API —
+      not approved public prices. Subscribing in this environment runs a simulated checkout; no payment occurs.</div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Get started</div>
+    <h2 class="disp">Your first baseline is 28 days from your second</h2>
+    <p class="muted" style="max-width:62ch">Create an account, get linked to a coach (or bring your own), and take
+      your first assessment. The clock starts at your baseline — everything after that is evidence.</p>
+    <div class="cta-row">
+      <a class="btn solid" href="./index.html">Create account</a>
+      <a class="btn ghost" href="./index.html">Log in</a>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="brand" style="margin-bottom:8px"><span class="wm" style="font-size:18px"><span>THE</span>PROGRAM</span><span class="tag">PLAY WITH PURPOSE.</span></div>
+    <p>Assessment results are coach-recorded measurements from an unvalidated field battery. Training assignments are
+      always coach-authored; assessment scores never auto-prescribe training. Guardian consent is required before
+      remote features activate for minor athletes.</p>
+  </div>
+</footer>
+
+<script>
+(function () {
+  'use strict';
+  /* Static fallback mirrors the seeded catalogue (server/saas-store.js
+   * PLANS) so the page renders even when the dev API is offline.
+   * When the API answers, its data wins. */
+  var FALLBACK_PLANS = [
+    { code: 'free_athlete', audience: 'athlete', name: 'Athlete Free', limits: { priceMonthlyCents: 0, priceAnnualCents: 0, trainingDaysPerWeek: 1, historyDays: 90, maxCoachLinks: 1, trialDays: 0 } },
+    { code: 'athlete_remote', audience: 'athlete', name: 'Athlete Remote', limits: { priceMonthlyCents: 1499, priceAnnualCents: 14900, trainingDaysPerWeek: null, historyDays: null, maxCoachLinks: null, trialDays: 0 } },
+    { code: 'coach_starter', audience: 'coach', name: 'Coach Starter', limits: { priceMonthlyCents: 2900, priceAnnualCents: 29000, maxAthletes: 15, maxCoaches: 1, overagePerAthleteCents: 200, trialDays: 14 } },
+    { code: 'coach_pro', audience: 'coach', name: 'Coach Pro', limits: { priceMonthlyCents: 7900, priceAnnualCents: 79000, maxAthletes: 50, maxCoaches: 3, overagePerAthleteCents: 150, trialDays: 14 } },
+    { code: 'team_academy', audience: 'organization', name: 'Team / Academy', limits: { priceMonthlyCents: 19900, priceAnnualCents: 199000, maxAthletes: 150, maxCoaches: null, overagePerAthleteCents: 150, trialDays: 14 } },
+    { code: 'academy_scale', audience: 'organization', name: 'Academy Scale', limits: { priceMonthlyCents: 34900, priceAnnualCents: 349000, maxAthletes: 400, maxCoaches: null, overagePerAthleteCents: 125, trialDays: 14 } }
+  ];
+  var interval = 'month';
+  var plans = FALLBACK_PLANS;
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function money(cents) {
+    if (!cents) return '$0';
+    var d = cents / 100;
+    return '$' + (Number.isInteger(d) ? d.toFixed(0) : d.toFixed(2));
+  }
+  function features(p) {
+    var l = p.limits || {}, out = [];
+    if (p.audience === 'athlete') {
+      out.push(l.trainingDaysPerWeek == null ? 'Unlimited training days' : l.trainingDaysPerWeek + ' training day per week');
+      out.push(l.historyDays == null ? 'Full history display' : l.historyDays + '-day history display window');
+      out.push(l.maxCoachLinks == null ? 'Unlimited coach links' : l.maxCoachLinks + ' coach link');
+      out.push('Assessment results + progress');
+    } else {
+      out.push(l.maxCoaches == null ? 'Unlimited coaches' : l.maxCoaches + ' coach' + (l.maxCoaches === 1 ? '' : 'es'));
+      out.push(l.maxAthletes == null ? 'Unlimited athletes' : 'Up to ' + l.maxAthletes + ' athletes');
+      if (l.overagePerAthleteCents) out.push('Overage ' + money(l.overagePerAthleteCents) + ' / athlete / month');
+      out.push('GAA battery + 28-day cycle included');
+      out.push('Training assignment + progress monitoring');
+    }
+    if (l.trialDays) out.push(l.trialDays + '-day free trial');
+    return out;
+  }
+  function render() {
+    var el = document.getElementById('plans');
+    el.innerHTML = plans.map(function (p) {
+      var cents = interval === 'year' ? p.limits.priceAnnualCents : p.limits.priceMonthlyCents;
+      var price = cents ? money(cents) + (interval === 'year' ? ' / year' : ' / month') : '$0 forever';
+      return '<div class="plan"><div class="eyebrow">' + esc(p.name) + '</div>'
+        + '<div class="price">' + esc(price) + '</div>'
+        + '<ul>' + features(p).map(function (f) { return '<li>' + esc(f) + '</li>'; }).join('') + '</ul>'
+        + '<div class="spacer"><a class="btn sm" href="./index.html">'
+        + (cents ? 'Subscribe (test mode)' : 'Start free') + '</a></div></div>';
+    }).join('');
+    document.getElementById('btn-month').setAttribute('aria-pressed', interval === 'month' ? 'true' : 'false');
+    document.getElementById('btn-year').setAttribute('aria-pressed', interval === 'year' ? 'true' : 'false');
+  }
+  document.getElementById('btn-month').addEventListener('click', function () { interval = 'month'; render(); });
+  document.getElementById('btn-year').addEventListener('click', function () { interval = 'year'; render(); });
+  render();
+  fetch('./api/saas/plans', { headers: { 'X-Dev-Role': 'director', 'X-Dev-User': 'dev-director-marcus' } })
+    .then(function (r) { return r.json(); })
+    .then(function (payload) {
+      if (payload && payload.ok && payload.data && Array.isArray(payload.data.plans) && payload.data.plans.length) {
+        plans = payload.data.plans;
+        render();
+      }
+    })
+    .catch(function () { /* offline: static fallback stays */ });
+})();
+</script>
+</body>
+</html>

@@ -46,6 +46,9 @@ const { MemoryReassessmentStore } = require('./reassessment');
 const { createAccessDirectory } = require('./assessment-access');
 const { createAssessmentWorkflow, MemoryPlanStore } = require('./assessment-workflow');
 const { createAssessmentApi, ALLOWED } = require('./assessment-api');
+const { MemorySaasStore, PROGRAM_INTERNAL_ORG_ID } = require('./saas-store');
+const { createSaasApi, ALLOWED: SAAS_ALLOWED } = require('./saas-api');
+const { FakeBillingAdapter } = require('./billing');
 const { ATHLETES, COACH_AUTH, DEV_USERS, Wingback, Youth } = require('./fixtures/dev-roster');
 
 const ROOT = path.join(__dirname, '..');
@@ -97,8 +100,130 @@ async function seedFixtures(workflow) {
   });
 }
 
+/* Seed the SaaS memory store from the same synthetic dev roster so
+ * the SaaS endpoints work on first load: the three internal coaches
+ * in the program_internal org (trialing coach_starter), all eight
+ * athletes, a guardian + granted consent for the 12-year-old, and an
+ * active $149 in-person membership for the 48-year-old (member
+ * entitlement demo). Synthetic only; wiped on restart. */
+function seedSaasStore(store) {
+  const now = Date.now();
+  const coachUsers = {
+    kayla: { authUserId: 'dev-coach-kayla', email: 'kayla@dev.invalid', name: 'Kayla (dev)' },
+    jordan: { authUserId: 'dev-coach-jordan', email: 'jordan@dev.invalid', name: 'Jordan (dev)' },
+    marcus: { authUserId: 'dev-coach-marcus', email: 'marcus@dev.invalid', name: 'Marcus (dev)' },
+  };
+  for (const [coachId, c] of Object.entries(coachUsers)) {
+    const appUserId = `dev-appuser-${coachId}`;
+    store.appUsers.set(appUserId, { id: appUserId, authUserId: c.authUserId, email: c.email, role: 'coach' });
+    store.coaches.set(coachId, { id: coachId, userId: appUserId, name: c.name, organizationId: PROGRAM_INTERNAL_ORG_ID });
+    store.orgMemberships.push({ organizationId: PROGRAM_INTERNAL_ORG_ID, appUserId, orgRole: 'coach', status: 'active' });
+    store.subscriptions.set(`dev-sub-${coachId}`, {
+      id: `dev-sub-${coachId}`, planCode: 'coach_starter', ownerType: 'coach', ownerId: coachId,
+      status: 'trialing', billingInterval: 'month',
+      currentPeriodStart: new Date(now).toISOString(),
+      currentPeriodEnd: new Date(now + 14 * 24 * 60 * 60 * 1000).toISOString(),
+      cancelAtPeriodEnd: false, provider: 'none', providerCustomerId: null, providerSubscriptionId: null,
+      createdAt: new Date(now).toISOString(), updatedAt: new Date(now).toISOString(),
+    });
+  }
+  const directorAppUserId = 'dev-appuser-director';
+  store.appUsers.set(directorAppUserId, { id: directorAppUserId, authUserId: 'dev-director-marcus', email: 'director@dev.invalid', role: 'director' });
+  for (const a of ATHLETES) {
+    store.athletes.set(a.id, {
+      id: a.id, appUserId: null, name: a.name, age: a.age ?? null, dob: null, sports: [],
+    });
+  }
+  // The youth athlete's own login + guardian + granted consent.
+  const youthAppUserId = 'dev-appuser-athlete-youth';
+  store.appUsers.set(youthAppUserId, { id: youthAppUserId, authUserId: 'dev-athlete-youth', email: 'youth@dev.invalid', role: 'athlete' });
+  const youth = store.athletes.get(Youth.athlete.id);
+  if (youth) youth.appUserId = youthAppUserId;
+  const parentAppUserId = 'dev-appuser-parent-youth';
+  store.appUsers.set(parentAppUserId, { id: parentAppUserId, authUserId: 'dev-parent-youth', email: 'parent@dev.invalid', role: 'parent' });
+  store.guardians.set('dev-guardian-youth', { id: 'dev-guardian-youth', userId: parentAppUserId });
+  store.athleteGuardians.push({ athleteId: Youth.athlete.id, guardianId: 'dev-guardian-youth' });
+  store.consents.push({
+    id: 'dev-consent-youth', athleteId: Youth.athlete.id, guardianId: 'dev-guardian-youth',
+    consentVersion: 'dev-v1', status: 'granted', method: 'in_app',
+    grantedAt: new Date(now).toISOString(), withdrawnAt: null, createdAt: new Date(now).toISOString(),
+  });
+  // The wingback holds an active in-person $149 membership.
+  store.memberships.push({
+    id: 'dev-membership-wingback', athleteId: Wingback.athlete.id, status: 'active',
+    priceCents: 14900, startDate: new Date(now - 30 * 24 * 60 * 60 * 1000).toISOString(), endDate: null,
+  });
+  // Cohort coach links mirrored as SaaS links (internal tenant).
+  for (const a of ATHLETES) {
+    for (const coachId of (a.coachIds || [])) {
+      store.links.push({
+        id: `dev-link-${coachId}-${a.id}`, coachId, athleteId: a.id,
+        organizationId: PROGRAM_INTERNAL_ORG_ID, status: 'active', source: 'program_internal',
+        startedAt: new Date(now).toISOString(), endedAt: null, createdBy: 'dev-director-marcus',
+      });
+    }
+  }
+}
+
 function createDevServer({ port = DEFAULT_PORT, root = ROOT, seed = true } = {}) {
-  const directory = createAccessDirectory({ athletes: ATHLETES, coachAuth: COACH_AUTH });
+  const saasStore = new MemorySaasStore();
+  seedSaasStore(saasStore);
+
+  /* SaaS integration (frontend slice): the assessment directory is
+   * rebuilt from the live SaaS store on every call, so athletes
+   * linked remotely (coach_athlete_links) appear in assessment
+   * flows immediately — a linked coach can assess/view, an
+   * org_admin can view (never assess) inside their orgs. Cohort
+   * scope is unchanged (server/assessment-access.js additive
+   * rules). SaaS-registered athletes/coaches join the directory
+   * with their auth UIDs so self/guardian/coach resolution works
+   * for remote-only people too. Dev-only, memory stores. */
+  function buildDirectory() {
+    const rosterIds = new Set(ATHLETES.map(a => String(a.id)));
+    const extra = [...saasStore.athletes.values()]
+      .filter(a => !rosterIds.has(String(a.id)))
+      .map(a => {
+        const appUser = a.appUserId ? saasStore.appUserById(a.appUserId) : null;
+        const guardianUserIds = saasStore.athleteGuardians
+          .filter(ag => ag.athleteId === a.id)
+          .map(ag => {
+            const g = saasStore.guardians.get(String(ag.guardianId));
+            const gu = g ? saasStore.appUserById(g.userId) : null;
+            return gu ? gu.authUserId : null;
+          })
+          .filter(Boolean);
+        return {
+          id: a.id, name: a.name, age: a.age ?? null, coachIds: [],
+          guardianUserIds, authUserId: appUser ? appUser.authUserId : null,
+        };
+      });
+    const coachAuth = { ...COACH_AUTH };
+    for (const c of saasStore.coaches.values()) {
+      const u = saasStore.appUserById(c.userId);
+      if (u) coachAuth[u.authUserId] = c.id;
+    }
+    const orgMemberships = saasStore.orgMemberships.map(m => {
+      const u = saasStore.appUserById(m.appUserId);
+      return u ? { authUserId: u.authUserId, organizationId: m.organizationId, orgRole: m.orgRole, status: m.status } : null;
+    }).filter(Boolean);
+    return createAccessDirectory({
+      athletes: [...ATHLETES, ...extra],
+      coachAuth,
+      links: saasStore.links,
+      orgMemberships,
+    });
+  }
+  const directory = {
+    get byId() { return buildDirectory().byId; },
+    coachIdFor: (auth) => buildDirectory().coachIdFor(auth),
+    athleteFor: (auth) => buildDirectory().athleteFor(auth),
+    requireAuth: (auth) => buildDirectory().requireAuth(auth),
+    canAssess: (auth, id) => buildDirectory().canAssess(auth, id),
+    canView: (auth, id) => buildDirectory().canView(auth, id),
+    requireAssess: (auth, id) => buildDirectory().requireAssess(auth, id),
+    requireView: (auth, id) => buildDirectory().requireView(auth, id),
+    listAthletes: (auth) => buildDirectory().listAthletes(auth),
+  };
   const workflow = createAssessmentWorkflow({
     store: new MemoryAssessmentStore(),
     reassessmentStore: new MemoryReassessmentStore(),
@@ -106,6 +231,21 @@ function createDevServer({ port = DEFAULT_PORT, root = ROOT, seed = true } = {})
     directory,
   });
   const api = createAssessmentApi({ workflow });
+  const billing = new FakeBillingAdapter(saasStore);
+  const saasApi = createSaasApi({
+    store: saasStore,
+    billing,
+    assessmentHistory: async (athleteId) => {
+      try {
+        const view = await workflow.athleteAssessmentView(DIRECTOR, { athleteId });
+        return (view.history || []).map(h => ({
+          sessionId: h.sessionId, battery: h.battery, completedAt: h.recordedAt, results: h.results,
+        }));
+      } catch (e) {
+        return [];
+      }
+    },
+  });
 
   /* Dev-only auth: the caller names a role/user; the server injects
    * the auth context. Default is the director (Marcus) so curl works
@@ -181,6 +321,49 @@ function createDevServer({ port = DEFAULT_PORT, root = ROOT, seed = true } = {})
         return;
       }
 
+      if (req.method === 'GET' && url.pathname === '/api/saas/plans') {
+        sendJson(res, 200, { ok: true, data: saasApi.listPlans(authFromHeaders(req)) });
+        return;
+      }
+
+      if (req.method === 'POST' && (url.pathname === '/api/saas' || url.pathname === '/api/billing')) {
+        let body;
+        try {
+          body = JSON.parse(await readBody(req));
+        } catch (e) {
+          sendJson(res, 400, { ok: false, error: { code: 'INVALID_INPUT', message: 'Request body must be JSON: ' + e.message } });
+          return;
+        }
+        const auth = authFromHeaders(req);
+        try {
+          let data;
+          if (url.pathname === '/api/saas') {
+            if (!body || typeof body.method !== 'string' || !SAAS_ALLOWED[body.method] || typeof saasApi[body.method] !== 'function') {
+              sendJson(res, 400, { ok: false, error: { code: 'INVALID_METHOD', message: 'Unknown SaaS method: ' + (body && body.method) } });
+              return;
+            }
+            data = await saasApi[body.method](auth, body.params || {});
+          } else {
+            // Billing (fake adapter, test-mode shape only). Methods:
+            // createCheckoutSession, confirmCheckout,
+            // createPortalSession, handleProviderEvent.
+            const methods = ['createCheckoutSession', 'confirmCheckout', 'createPortalSession', 'handleProviderEvent'];
+            if (!body || !methods.includes(body.method)) {
+              sendJson(res, 400, { ok: false, error: { code: 'INVALID_METHOD', message: 'Unknown billing method: ' + (body && body.method) } });
+              return;
+            }
+            if (!auth.authUserId) throw Object.assign(new Error('An authenticated user is required.'), { code: 'UNAUTHENTICATED' });
+            data = body.method === 'confirmCheckout'
+              ? billing.confirmCheckout((body.params || {}).sessionId, body.params || {})
+              : billing[body.method](body.params || {});
+          }
+          sendJson(res, 200, { ok: true, data });
+        } catch (e) {
+          sendJson(res, 200, { ok: false, error: { code: e.code || 'SAAS_ERROR', message: e.message, ...(e.coveringSource ? { coveringSource: e.coveringSource } : {}) } });
+        }
+        return;
+      }
+
       if (req.method === 'GET') {
         const rel = url.pathname === '/' ? 'index.html' : decodeURIComponent(url.pathname).replace(/^\/+/, '');
         const filePath = path.resolve(root, rel);
@@ -203,6 +386,7 @@ function createDevServer({ port = DEFAULT_PORT, root = ROOT, seed = true } = {})
   let listeningPort = null;
   return {
     server, api, workflow, directory, devUsers: DEV_USERS,
+    saasApi, saasStore, billing,
     get port() { return listeningPort; },
     get url() { return `http://127.0.0.1:${listeningPort}`; },
     async start() {
@@ -227,6 +411,7 @@ if (require.main === module) {
     console.log('THE PROGRAM OS — dev assessment server (DEV ONLY, synthetic data, memory stores)');
     console.log(`  App:     ${dev.url}/`);
     console.log(`  API:     ${dev.url}/api/assessments`);
+    console.log(`  SaaS:    ${dev.url}/api/saas  (plans: ${dev.url}/api/saas/plans, billing: ${dev.url}/api/billing)`);
     console.log(`  Battery: ${dev.url}/api/assessments/battery`);
     console.log(`  Seeded:  ${seed ? 'yes (youth-12 baseline+reassessment, wingback-48 baseline)' : 'no'}`);
     console.log('  Roles:   send X-Dev-Role / X-Dev-User / X-Dev-Athlete headers; default is director.');
