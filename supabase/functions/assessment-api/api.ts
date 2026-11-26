@@ -34,10 +34,11 @@ export interface AuthContext {
 // only (listAthletes, athleteAssessmentView, planReadiness,
 // advisoryPriorities) — never on recording/writing methods, getDraft,
 // or coachDashboard. Mirrors server/assessment-api.js ALLOWED exactly
-// (pinned by server/tests/edge-function.test.js). NOTE: directory.ts
-// does not yet build SaaS links/orgMemberships, so Edge org_admin
-// scope stays empty until that deploy-time wiring lands; the Node/dev
-// path is fully wired.
+// (pinned by server/tests/edge-function.test.js). Wired end to end
+// since 2026-11-26: directory.ts builds the SaaS links and org
+// memberships (migration 006) and workflow.ts passes them into the
+// access directory, so Edge org_admin scope is live; the Node/dev
+// path was already wired.
 export const ALLOWED: Record<string, Role[]> = {
   listAthletes: ["director", "coach", "parent", "athlete", "org_admin"],
   startAssessment: ["director", "coach"],
